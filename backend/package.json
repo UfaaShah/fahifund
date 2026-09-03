@@ -8,7 +8,8 @@
     "build": "tsc -p tsconfig.json && mkdir -p dist/lib && cp src/lib/schema.sql dist/lib/schema.sql",
     "start": "node dist/index.js",
     "db:init": "ts-node --transpile-only src/scripts/initDb.ts",
-    "seed": "ts-node --transpile-only src/scripts/seed.ts"
+    "seed": "ts-node --transpile-only src/scripts/seed.ts",
+    "seed:showcase": "ts-node --transpile-only src/scripts/seedShowcase.ts"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

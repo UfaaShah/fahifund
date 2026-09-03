@@ -27,11 +27,6 @@ export default function LoginPage() {
     }
   }
 
-  function fillDemo(id: string) {
-    setIdentifier(id);
-    setPassword("Demo@1234");
-  }
-
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-[#f6f8f7] px-4 py-10">
       <div className="mb-8">
@@ -75,22 +70,6 @@ export default function LoginPage() {
             {loading ? "Signing in..." : "Sign in"}
           </Button>
         </form>
-      </div>
-
-      <div className="mt-6 w-full max-w-sm rounded-2xl bg-white/60 p-4 ring-1 ring-slate-900/5">
-        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Demo accounts</p>
-        <div className="flex flex-wrap gap-2">
-          <button onClick={() => fillDemo("superadmin@fahifund.test")} className="rounded-lg bg-slate-100 px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-200">
-            Super Admin
-          </button>
-          <button onClick={() => fillDemo("ahmed.shah@fahifund.test")} className="rounded-lg bg-slate-100 px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-200">
-            Admin
-          </button>
-          <button onClick={() => fillDemo("hassan.ibrahim@fahifund.test")} className="rounded-lg bg-slate-100 px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-200">
-            Member
-          </button>
-        </div>
-        <p className="mt-2 text-xs text-slate-400">Tap a role to fill the form, password: Demo@1234</p>
       </div>
     </div>
   );

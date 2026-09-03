@@ -1,5 +1,4 @@
 import { Router } from "express";
-import crypto from "crypto";
 import { z } from "zod";
 import { db } from "../lib/db";
 import { hashPassword } from "../lib/auth";
@@ -8,6 +7,7 @@ import { authenticate, authorize, AuthedRequest } from "../middleware/auth";
 import { logAudit } from "../lib/audit";
 import { notify } from "../lib/notify";
 import { asyncHandler } from "../lib/asyncHandler";
+import { DEFAULT_PASSWORD } from "../lib/constants";
 
 const router = Router();
 
@@ -55,7 +55,7 @@ router.post("/", authenticate, authorize("SUPER_ADMIN"), asyncHandler(async (req
     .prepare("SELECT member_code FROM users WHERE member_code LIKE 'FF-%' ORDER BY CAST(SUBSTR(member_code, 4) AS INTEGER) DESC LIMIT 1")
     .get() as any;
   const memberCode = nextMemberCode(last?.member_code ?? null);
-  const tempPassword = crypto.randomBytes(4).toString("hex");
+  const tempPassword = DEFAULT_PASSWORD;
   const passwordHash = await hashPassword(tempPassword);
   const id = newId();
 
@@ -74,7 +74,7 @@ router.post("/", authenticate, authorize("SUPER_ADMIN"), asyncHandler(async (req
   res.status(201).json({
     user: serializeUser(user),
     tempPassword,
-    note: "Share this temporary password with the member securely. In production this would be sent via an invitation email/SMS instead of returned here.",
+    note: `Everyone starts with the default password "${DEFAULT_PASSWORD}" — ask them to change it after their first login via Profile → Change Password.`,
   });
 }));
 

@@ -47,7 +47,7 @@ You need Node.js 18+ (built and tested on Node 22).
 cd backend
 npm install
 npm run db:init     # creates the SQLite schema (dev.db)
-npm run seed         # wipes and loads demo data — safe to re-run any time
+npm run seed         # wipes and creates a single bootstrap Super Admin — safe to re-run any time
 npm run dev           # starts the API on http://localhost:4000
 ```
 
@@ -59,15 +59,18 @@ Uploaded payment/payout receipts are stored under `backend/uploads/` and served 
 
 There's also a smoke-test script that exercises the full monthly cycle against a running backend
 (login → submit payment → confirm → complete payout → run & lock a Fortune Wheel → pull reports
-and audit logs → verify role permissions are enforced):
+and audit logs → verify role permissions are enforced). It runs against the old, fully-populated
+showcase dataset (3 funds, 10 members), not the plain bootstrap account, so seed that first:
 
 ```bash
 cd backend
-./test-workflow.sh   # requires the dev server running and `jq` installed
+npm run seed:showcase   # loads the 3-fund/10-member showcase dataset the smoke test expects
+./test-workflow.sh      # requires the dev server running and `jq` installed
 ```
 
-Re-run `npm run seed` afterwards to restore the pristine demo data, since the script does real
-writes.
+Re-run `npm run seed:showcase` afterwards to restore the pristine showcase data, since the script
+does real writes. Run plain `npm run seed` when you're done to go back to the single bootstrap
+Super Admin.
 
 ### 2. Frontend
 
@@ -163,9 +166,26 @@ CORS_ORIGIN=https://fahi-fund.vercel.app,https://fahi-fund-git-main-yourname.ver
 Redeploy the backend for the change to take effect. At that point the deployed frontend and
 backend are talking to each other.
 
-## Demo accounts
+## Default account
 
-Seeded by `npm run seed`. Password for every account: **`Demo@1234`**
+`npm run seed` (and first boot of a fresh deployment — see `seedIfEmpty.ts`) creates a single
+Super Admin account and nothing else:
+
+| Name | Login | Password |
+|---|---|---|
+| Ahmed Shah | `ahmed.shah@fahifund.com` | `welcome123` |
+
+Every account created afterwards via **Add Member** also starts on the same default password,
+`welcome123`, shown once to the Super Admin so they can share it — everyone is expected to change
+their own password after first login via **Profile → Change Password**.
+
+The login page's old "Demo accounts" quick-fill buttons have been removed now that this is a real
+account, not a showcase.
+
+### Showcase dataset (for local testing only)
+
+`npm run seed:showcase` loads the old, fully-populated 3-fund/10-member demo dataset that
+`test-workflow.sh` exercises. Password for every account in it: **`Demo@1234`**
 
 | Role | Email | Notes |
 |---|---|---|
@@ -173,6 +193,9 @@ Seeded by `npm run seed`. Password for every account: **`Demo@1234`**
 | Admin | `ahmed.shah@fahifund.test` | Collects for *Fahi Fund - Demo 2026* |
 | Member | `ali.waheed@fahifund.test` | Also Admin of *Fahi Fund - Family Circle* |
 | Member | `hassan.ibrahim@fahifund.test` | Next in line to receive, month 3 of 10 |
+
+This is separate from the real `ahmed.shah@fahifund.com` Super Admin above — same first name,
+different account, only used for local development/testing.
 
 The Login page also has one-tap buttons that fill these in.
 

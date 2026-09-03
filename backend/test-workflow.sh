@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# End-to-end smoke test against the showcase demo dataset.
+# Run `npm run seed:showcase` first to load the accounts/funds this expects.
 set -e
 BASE=http://localhost:4000/api
 
