@@ -16,6 +16,7 @@ import notificationRoutes from "./routes/notifications";
 import auditLogRoutes from "./routes/auditLogs";
 import reportRoutes from "./routes/reports";
 import dashboardRoutes from "./routes/dashboard";
+import systemRoutes from "./routes/system";
 
 const app = express();
 
@@ -44,6 +45,7 @@ app.use("/api/notifications", notificationRoutes);
 app.use("/api/audit-logs", auditLogRoutes);
 app.use("/api/reports", reportRoutes);
 app.use("/api/dashboard", dashboardRoutes);
+app.use("/api/system", systemRoutes);
 
 // Centralized error handler (covers multer errors and anything unexpected)
 app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
@@ -54,6 +56,19 @@ app.use((err: any, _req: express.Request, res: express.Response, _next: express.
 });
 
 app.use((_req, res) => res.status(404).json({ error: "Not found" }));
+
+// Last-resort safety net: Node terminates the whole process on an unhandled
+// promise rejection by default (since Node 15). Every async route handler
+// is wrapped with asyncHandler() so its errors reach Express's error
+// middleware instead, but this catches anything that slips through (a
+// stray unawaited promise, a future handler someone forgets to wrap) so a
+// single bug can't take the API down for every user.
+process.on("unhandledRejection", (reason) => {
+  console.error("Unhandled promise rejection (server kept running):", reason);
+});
+process.on("uncaughtException", (err) => {
+  console.error("Uncaught exception (server kept running):", err);
+});
 
 const PORT = Number(process.env.PORT) || 4000;
 

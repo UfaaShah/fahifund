@@ -180,6 +180,31 @@ router.post("/:id/cancel", authenticate, authorize("SUPER_ADMIN"), (req: AuthedR
   res.json({ success: true });
 });
 
+router.delete("/:id", authenticate, authorize("SUPER_ADMIN"), (req: AuthedRequest, res) => {
+  const fund = getFund(req.params.id);
+  if (!fund) return res.status(404).json({ error: "Fund not found" });
+
+  const paymentCount = (db.prepare("SELECT COUNT(*) as c FROM payments WHERE fund_id = ?").get(fund.id) as any).c;
+  const payoutCount = (db.prepare("SELECT COUNT(*) as c FROM payouts WHERE fund_id = ?").get(fund.id) as any).c;
+  if (paymentCount > 0 || payoutCount > 0) {
+    return res.status(400).json({
+      error:
+        "This fund has payment or payout history and can't be permanently deleted — cancel it instead to keep the records.",
+    });
+  }
+
+  const wipe = db.transaction(() => {
+    db.prepare("DELETE FROM fortune_orders WHERE fund_id = ?").run(fund.id);
+    db.prepare("DELETE FROM fund_members WHERE fund_id = ?").run(fund.id);
+    db.prepare("UPDATE audit_logs SET fund_id = NULL WHERE fund_id = ?").run(fund.id);
+    db.prepare("DELETE FROM funds WHERE id = ?").run(fund.id);
+  });
+  wipe();
+
+  logAudit({ userId: req.user!.userId, action: "DELETE_FUND", description: `Super Admin permanently deleted fund "${fund.name}"` });
+  res.json({ success: true });
+});
+
 // ---------- Admin assignment ----------
 
 router.post("/:id/admin", authenticate, authorize("SUPER_ADMIN"), (req: AuthedRequest, res) => {

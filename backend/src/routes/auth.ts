@@ -6,6 +6,7 @@ import { hashPassword, verifyPassword, signToken } from "../lib/auth";
 import { newId } from "../lib/ids";
 import { authenticate, AuthedRequest } from "../middleware/auth";
 import { logAudit } from "../lib/audit";
+import { asyncHandler } from "../lib/asyncHandler";
 
 const router = Router();
 
@@ -69,7 +70,7 @@ const changePasswordSchema = z.object({
   newPassword: z.string().min(6, "New password must be at least 6 characters"),
 });
 
-router.post("/change-password", authenticate, async (req: AuthedRequest, res) => {
+router.post("/change-password", authenticate, asyncHandler(async (req: AuthedRequest, res) => {
   const parsed = changePasswordSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
   const user = db.prepare("SELECT * FROM users WHERE id = ?").get(req.user!.userId) as any;
@@ -79,7 +80,7 @@ router.post("/change-password", authenticate, async (req: AuthedRequest, res) =>
   db.prepare("UPDATE users SET password_hash = ? WHERE id = ?").run(newHash, user.id);
   logAudit({ userId: user.id, action: "CHANGE_PASSWORD", description: `${user.name} changed their password` });
   res.json({ success: true });
-});
+}));
 
 const forgotSchema = z.object({ identifier: z.string().min(1) });
 
@@ -110,7 +111,7 @@ const resetSchema = z.object({
   newPassword: z.string().min(6, "New password must be at least 6 characters"),
 });
 
-router.post("/reset-password", async (req, res) => {
+router.post("/reset-password", asyncHandler(async (req, res) => {
   const parsed = resetSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
   const tokenHash = crypto.createHash("sha256").update(parsed.data.token).digest("hex");
@@ -125,6 +126,6 @@ router.post("/reset-password", async (req, res) => {
   db.prepare("UPDATE password_resets SET used_at = ? WHERE id = ?").run(new Date().toISOString(), record.id);
   logAudit({ userId: record.user_id, action: "RESET_PASSWORD", description: "Password reset via forgot-password flow" });
   res.json({ success: true });
-});
+}));
 
 export default router;

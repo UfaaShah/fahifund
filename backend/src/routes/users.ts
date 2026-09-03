@@ -7,6 +7,7 @@ import { newId, nextMemberCode } from "../lib/ids";
 import { authenticate, authorize, AuthedRequest } from "../middleware/auth";
 import { logAudit } from "../lib/audit";
 import { notify } from "../lib/notify";
+import { asyncHandler } from "../lib/asyncHandler";
 
 const router = Router();
 
@@ -39,7 +40,7 @@ const createUserSchema = z.object({
   role: z.enum(["SUPER_ADMIN", "ADMIN", "USER"]).default("USER"),
 });
 
-router.post("/", authenticate, authorize("SUPER_ADMIN"), async (req: AuthedRequest, res) => {
+router.post("/", authenticate, authorize("SUPER_ADMIN"), asyncHandler(async (req: AuthedRequest, res) => {
   const parsed = createUserSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
   const { name, email, phone, nationalId, role } = parsed.data;
@@ -47,7 +48,12 @@ router.post("/", authenticate, authorize("SUPER_ADMIN"), async (req: AuthedReque
   const existing = db.prepare("SELECT id FROM users WHERE email = ? OR phone = ?").get(email, phone);
   if (existing) return res.status(409).json({ error: "A user with this email or phone already exists" });
 
-  const last = db.prepare("SELECT member_code FROM users ORDER BY created_at DESC LIMIT 1").get() as any;
+  // Ordered by the numeric suffix itself, not created_at — seeded/batch-inserted rows can
+  // share the same millisecond timestamp, which previously picked an arbitrary "last" row
+  // and could hand out a member_code that already existed (crashing on the UNIQUE constraint).
+  const last = db
+    .prepare("SELECT member_code FROM users WHERE member_code LIKE 'FF-%' ORDER BY CAST(SUBSTR(member_code, 4) AS INTEGER) DESC LIMIT 1")
+    .get() as any;
   const memberCode = nextMemberCode(last?.member_code ?? null);
   const tempPassword = crypto.randomBytes(4).toString("hex");
   const passwordHash = await hashPassword(tempPassword);
@@ -70,7 +76,7 @@ router.post("/", authenticate, authorize("SUPER_ADMIN"), async (req: AuthedReque
     tempPassword,
     note: "Share this temporary password with the member securely. In production this would be sent via an invitation email/SMS instead of returned here.",
   });
-});
+}));
 
 const updateUserSchema = z.object({
   name: z.string().min(1).optional(),
@@ -107,6 +113,60 @@ router.patch("/:id/status", authenticate, authorize("SUPER_ADMIN"), (req: Authed
     description: `Super Admin ${status === "SUSPENDED" ? "suspended" : "reactivated"} ${user.name}`,
   });
   res.json(serializeUser(db.prepare("SELECT * FROM users WHERE id = ?").get(user.id)));
+});
+
+router.delete("/:id", authenticate, authorize("SUPER_ADMIN"), (req: AuthedRequest, res) => {
+  const target = db.prepare("SELECT * FROM users WHERE id = ?").get(req.params.id) as any;
+  if (!target) return res.status(404).json({ error: "User not found" });
+
+  if (target.id === req.user!.userId) {
+    return res.status(400).json({ error: "You can't delete your own account while logged in." });
+  }
+  if (target.role === "SUPER_ADMIN") {
+    const remaining = (db.prepare("SELECT COUNT(*) as c FROM users WHERE role = 'SUPER_ADMIN'").get() as any).c;
+    if (remaining <= 1) {
+      return res.status(400).json({ error: "You can't delete the last remaining Super Admin account." });
+    }
+  }
+
+  let blocker: string | null = null;
+  if (!blocker && (db.prepare("SELECT COUNT(*) as c FROM fund_members WHERE user_id = ?").get(target.id) as any).c > 0) {
+    blocker = "have been a member of a fund";
+  }
+  if (!blocker && (db.prepare("SELECT COUNT(*) as c FROM payments WHERE member_id = ?").get(target.id) as any).c > 0) {
+    blocker = "have submitted payments";
+  }
+  if (!blocker && (db.prepare("SELECT COUNT(*) as c FROM payouts WHERE beneficiary_id = ?").get(target.id) as any).c > 0) {
+    blocker = "have received a payout";
+  }
+  if (!blocker && (db.prepare("SELECT COUNT(*) as c FROM fortune_orders WHERE member_id = ?").get(target.id) as any).c > 0) {
+    blocker = "are part of a locked Fortune order";
+  }
+  if (
+    !blocker &&
+    (db.prepare("SELECT COUNT(*) as c FROM funds WHERE admin_id = ? OR created_by_id = ?").get(target.id, target.id) as any).c > 0
+  ) {
+    blocker = "are a fund's Admin or creator";
+  }
+  if (blocker) {
+    return res.status(400).json({
+      error: `${target.name} can't be permanently deleted because they ${blocker}. Suspend the account instead to preserve fund records.`,
+    });
+  }
+
+  const wipe = db.transaction(() => {
+    db.prepare("UPDATE payments SET verified_by_id = NULL WHERE verified_by_id = ?").run(target.id);
+    db.prepare("UPDATE payouts SET completed_by_id = NULL WHERE completed_by_id = ?").run(target.id);
+    db.prepare("UPDATE audit_logs SET user_id = NULL WHERE user_id = ?").run(target.id);
+    db.prepare("DELETE FROM bank_accounts WHERE user_id = ?").run(target.id);
+    db.prepare("DELETE FROM notifications WHERE user_id = ?").run(target.id);
+    db.prepare("DELETE FROM password_resets WHERE user_id = ?").run(target.id);
+    db.prepare("DELETE FROM users WHERE id = ?").run(target.id);
+  });
+  wipe();
+
+  logAudit({ userId: req.user!.userId, action: "DELETE_MEMBER", description: `Super Admin permanently deleted ${target.name}'s account` });
+  res.json({ success: true });
 });
 
 router.get("/:id", authenticate, (req: AuthedRequest, res) => {

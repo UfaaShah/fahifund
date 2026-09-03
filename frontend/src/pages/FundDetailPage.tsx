@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "../lib/AuthContext";
 import { useFund, useInvalidateFund, useUsers } from "../lib/queries";
 import { api, ApiError } from "../lib/api";
-import { Card, LoadingScreen, StatusBadge, Button, ErrorBanner, SectionTitle, inputClass } from "../components/ui";
+import { Card, LoadingScreen, StatusBadge, Button, ErrorBanner, SectionTitle, Field, inputClass } from "../components/ui";
 import { money, shortDate } from "../lib/format";
 import { BankIcon, ChevronRightIcon, UsersIcon, WheelIcon, ReportIcon, AuditIcon } from "../components/icons";
 
@@ -92,6 +92,8 @@ export default function FundDetailPage() {
         </div>
       </div>
 
+      {isSuperAdmin && !f.fortuneLockedAt && <EditFundDetails fund={f} onError={setError} />}
+
       {isSuperAdmin && (f.status === "DRAFT" || f.status === "FORTUNE_PENDING") && (
         <DangerZone
           label="Cancel this fund"
@@ -105,6 +107,23 @@ export default function FundDetailPage() {
               navigate("/app/funds");
             } catch (err) {
               setError(err instanceof ApiError ? err.message : "Failed to cancel fund");
+            }
+          }}
+        />
+      )}
+
+      {isSuperAdmin && (f.status === "DRAFT" || f.status === "FORTUNE_PENDING") && (
+        <DangerZone
+          label="Delete this fund permanently"
+          description="Only possible when the fund has no payment or payout history yet — otherwise cancel it instead. This removes it entirely rather than just marking it cancelled."
+          confirmLabel="Yes, delete permanently"
+          onConfirm={async () => {
+            setError(null);
+            try {
+              await api.delete(`/funds/${f.id}`);
+              navigate("/app/funds");
+            } catch (err) {
+              setError(err instanceof ApiError ? err.message : "Failed to delete fund");
             }
           }}
         />
@@ -137,6 +156,94 @@ function LinkTile({ to, icon, label, highlight }: { to: string; icon: React.Reac
       {icon}
       {label}
     </Link>
+  );
+}
+
+function EditFundDetails({ fund, onError }: { fund: any; onError: (m: string) => void }) {
+  const invalidate = useInvalidateFund();
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState(fund.name);
+  const [description, setDescription] = useState(fund.description || "");
+  const [contributionAmount, setContributionAmount] = useState(String(fund.contributionAmount));
+  const [durationMonths, setDurationMonths] = useState(String(fund.durationMonths));
+  const [startDate, setStartDate] = useState(fund.startDate?.slice(0, 10) || "");
+  const [saving, setSaving] = useState(false);
+
+  if (!open) {
+    return (
+      <button onClick={() => setOpen(true)} className="text-left text-sm font-medium text-brand-600 hover:underline">
+        Edit fund details
+      </button>
+    );
+  }
+
+  async function save(e: React.FormEvent) {
+    e.preventDefault();
+    setSaving(true);
+    onError("");
+    try {
+      await api.patch(`/funds/${fund.id}`, {
+        name,
+        description: description || undefined,
+        contributionAmount: Number(contributionAmount),
+        durationMonths: Number(durationMonths),
+        startDate,
+      });
+      invalidate(fund.id);
+      setOpen(false);
+    } catch (err) {
+      onError(err instanceof ApiError ? err.message : "Failed to update fund");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Card className="p-4">
+      <SectionTitle>Edit fund details</SectionTitle>
+      <form onSubmit={save} className="space-y-3">
+        <Field label="Name">
+          <input className={inputClass} value={name} onChange={(e) => setName(e.target.value)} required />
+        </Field>
+        <Field label="Description" hint="Optional">
+          <input className={inputClass} value={description} onChange={(e) => setDescription(e.target.value)} />
+        </Field>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Monthly contribution">
+            <input
+              className={inputClass}
+              type="number"
+              min="1"
+              step="0.01"
+              value={contributionAmount}
+              onChange={(e) => setContributionAmount(e.target.value)}
+              required
+            />
+          </Field>
+          <Field label="Duration (months)">
+            <input
+              className={inputClass}
+              type="number"
+              min="1"
+              value={durationMonths}
+              onChange={(e) => setDurationMonths(e.target.value)}
+              required
+            />
+          </Field>
+        </div>
+        <Field label="Start date">
+          <input className={inputClass} type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} required />
+        </Field>
+        <div className="flex gap-2">
+          <Button type="button" variant="secondary" onClick={() => setOpen(false)}>
+            Cancel
+          </Button>
+          <Button type="submit" disabled={saving}>
+            {saving ? "Saving…" : "Save changes"}
+          </Button>
+        </div>
+      </form>
+    </Card>
   );
 }
 
