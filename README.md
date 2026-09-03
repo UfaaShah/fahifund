@@ -100,15 +100,17 @@ git remote add origin <your-repo-url>
 git push -u origin main
 ```
 
-### 2. Backend → Render
+### 2. Backend → Render (free plan, no card required)
 
-Either use the included Blueprint or set it up by hand.
+`render.yaml` is set up for Render's **free** web service plan by default — no payment info
+needed. Either use the included Blueprint or set it up by hand.
 
 **Blueprint (faster):** In the Render dashboard, **New +** → **Blueprint**, point it at this
-repo. It reads `render.yaml` at the repo root and creates the web service, a 1GB persistent
-disk mounted at `/var/data`, and a generated `JWT_SECRET` automatically.
+repo. It reads `render.yaml` at the repo root and creates the web service (free plan) and a
+generated `JWT_SECRET` automatically.
 
-**Manual setup:** **New +** → **Web Service**, point it at this repo, then set:
+**Manual setup:** **New +** → **Web Service**, point it at this repo, choose the **Free**
+instance type, then set:
 
 | Setting | Value |
 |---|---|
@@ -121,13 +123,20 @@ Add these environment variables (see `backend/.env.example` for details on each)
 `DATABASE_PATH`, `UPLOAD_DIR`, `JWT_SECRET`, `JWT_EXPIRES_IN`, `SEED_ON_BOOT`. Leave
 `CORS_ORIGIN` for step 4.
 
-**Persistent disk**: SQLite and uploaded files live on disk, so without a Render persistent
-disk (Starter plan or above), every deploy or restart wipes the database and uploads back to
-empty (then re-seeds demo data, since `SEED_ON_BOOT` defaults to true). That's fine for a demo,
-not for real use — add a disk (e.g. mounted at `/var/data`) and point `DATABASE_PATH` /
-`UPLOAD_DIR` at paths under it if you want data to survive.
+**Free tier vs. persistent data**: on the free plan there's no persistent disk (that's a paid
+feature — Starter plan or above), so SQLite and uploaded files live on the instance's local,
+ephemeral storage. That storage is wiped on every deploy, and free instances also auto-sleep
+after 15 minutes of inactivity — the *next* request wakes a fresh instance with a fresh disk,
+so in practice the demo data resets itself fairly often (harmless — `SEED_ON_BOOT` reloads it
+automatically) and any real payments/uploads you add in between won't survive a sleep cycle.
+That's completely fine for trying this out or demoing it; it's not suitable for data you need
+to keep. If you outgrow that: upgrade the service to a Starter plan, add a **Disk** (e.g.
+mounted at `/var/data`), and change `DATABASE_PATH`/`UPLOAD_DIR` to paths under it — no code
+changes needed, since both are already read from environment variables.
 
-Once deployed, note the backend's URL (e.g. `https://fahi-fund-api.onrender.com`).
+Once deployed, note the backend's URL (e.g. `https://fahi-fund-api.onrender.com`). The free
+plan's cold start (waking a sleeping instance) can take 30–60 seconds, so the first request
+after a quiet period will feel slow — that's normal.
 
 ### 3. Frontend → Vercel
 

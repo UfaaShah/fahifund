@@ -3,29 +3,30 @@
 # hand. See the "Deploying" section in README.md for the manual steps and
 # for what to do on the frontend (Vercel) side.
 #
-# Note: the persistent disk below requires a paid Render plan (Starter or
-# above) — Render's free tier has no persistent disk, so the SQLite database
-# and uploaded files would be wiped on every deploy/restart. Fine for a
-# quick demo, not for anything you want to keep.
+# This is configured for Render's FREE plan: no persistent disk, since disks
+# require a paid plan (Starter or above). That means the SQLite database and
+# uploaded files live on the instance's local (ephemeral) storage and are
+# wiped every time the service redeploys or restarts — including waking up
+# from the free plan's auto-sleep after 15 minutes of inactivity, which
+# effectively means the demo data resets itself often. Fine for a demo or
+# for trying this out; not for anything you want to keep. See the
+# "Free tier vs. persistent data" note in the README for how to upgrade to
+# a paid plan + disk later without changing any code.
 
 services:
   - type: web
     name: fahi-fund-api
     runtime: node
     rootDir: backend
-    plan: starter
+    plan: free
     buildCommand: npm install && npm run build
     startCommand: npm start
     healthCheckPath: /api/health
-    disk:
-      name: fahi-fund-data
-      mountPath: /var/data
-      sizeGB: 1
     envVars:
       - key: DATABASE_PATH
-        value: /var/data/dev.db
+        value: ./dev.db
       - key: UPLOAD_DIR
-        value: /var/data/uploads
+        value: ./uploads
       - key: JWT_SECRET
         generateValue: true
       - key: JWT_EXPIRES_IN
