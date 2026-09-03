@@ -1,0 +1,36 @@
+# Render Blueprint — lets you deploy the backend with "New +" → "Blueprint"
+# on Render, pointed at this repo, instead of configuring a Web Service by
+# hand. See the "Deploying" section in README.md for the manual steps and
+# for what to do on the frontend (Vercel) side.
+#
+# Note: the persistent disk below requires a paid Render plan (Starter or
+# above) — Render's free tier has no persistent disk, so the SQLite database
+# and uploaded files would be wiped on every deploy/restart. Fine for a
+# quick demo, not for anything you want to keep.
+
+services:
+  - type: web
+    name: fahi-fund-api
+    runtime: node
+    rootDir: backend
+    plan: starter
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    disk:
+      name: fahi-fund-data
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: DATABASE_PATH
+        value: /var/data/dev.db
+      - key: UPLOAD_DIR
+        value: /var/data/uploads
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_EXPIRES_IN
+        value: 7d
+      - key: SEED_ON_BOOT
+        value: "true"
+      - key: CORS_ORIGIN
+        sync: false
