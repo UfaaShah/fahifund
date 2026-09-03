@@ -84,6 +84,9 @@ export const CloseIcon = (p: SVGProps<SVGSVGElement>) => (
 export const KeyIcon = (p: SVGProps<SVGSVGElement>) => (
   <svg {...base(p)}><circle cx="8" cy="15" r="4" /><path d="M10.5 12.5 20 3" /><path d="M16 7l2.5 2.5" /><path d="M13 4l2.5 2.5" /></svg>
 );
+export const SwapIcon = (p: SVGProps<SVGSVGElement>) => (
+  <svg {...base(p)}><path d="M4 8h14" /><path d="M14 4l4 4-4 4" /><path d="M20 16H6" /><path d="M10 12l-4 4 4 4" /></svg>
+);
 export const DownloadIcon = (p: SVGProps<SVGSVGElement>) => (
   <svg {...base(p)}><path d="M12 3v12" /><path d="M7 10l5 5 5-5" /><path d="M4 21h16" /></svg>
 );

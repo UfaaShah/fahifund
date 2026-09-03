@@ -173,7 +173,7 @@ Super Admin account and nothing else:
 
 | Name | Login | Password |
 |---|---|---|
-| Ahmed Shah | `ahmed.shah@fahifund.com` | `welcome123` |
+| Ufaa | `9994000` (mobile number) | `welcome123` |
 
 Every account created afterwards via **Add Member** also starts on the same default password,
 `welcome123`, shown once to the Super Admin so they can share it — everyone is expected to change
@@ -194,8 +194,8 @@ account, not a showcase.
 | Member | `ali.waheed@fahifund.test` | Also Admin of *Fahi Fund - Family Circle* |
 | Member | `hassan.ibrahim@fahifund.test` | Next in line to receive, month 3 of 10 |
 
-This is separate from the real `ahmed.shah@fahifund.com` Super Admin above — same first name,
-different account, only used for local development/testing.
+This is a separate, unrelated account from the real Super Admin (`Ufaa` / `9994000`) above —
+only used for local development/testing.
 
 The Login page also has one-tap buttons that fill these in.
 

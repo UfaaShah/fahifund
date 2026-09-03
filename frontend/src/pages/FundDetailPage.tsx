@@ -3,9 +3,9 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "../lib/AuthContext";
 import { useFund, useFortuneSwaps, useInvalidateFund, useUsers } from "../lib/queries";
 import { api, ApiError } from "../lib/api";
-import { Card, LoadingScreen, StatusBadge, Button, ErrorBanner, SectionTitle, Field, inputClass } from "../components/ui";
+import { Card, LoadingScreen, StatusBadge, Button, ErrorBanner, SectionTitle, Field, inputClass, Avatar } from "../components/ui";
 import { money, shortDate } from "../lib/format";
-import { BankIcon, ChevronRightIcon, UsersIcon, WheelIcon, ReportIcon, AuditIcon } from "../components/icons";
+import { BankIcon, ChevronRightIcon, UsersIcon, WheelIcon, ReportIcon, AuditIcon, SwapIcon } from "../components/icons";
 import type { FundMemberRow } from "../lib/types";
 
 export default function FundDetailPage() {
@@ -434,19 +434,33 @@ function FortuneSwapRequests({
     }
   }
 
+  // Requests where this viewer has something to do (approve, or Super Admin's final approval)
+  // float to the top so they aren't buried under settled/watching-only ones.
+  const sorted = [...(swaps || [])].sort((a, b) => {
+    const rank = (s: any) => {
+      const myApprovalPending =
+        (s.member_a_id === currentUserId && !s.member_a_approved_at) ||
+        (s.member_b_id === currentUserId && !s.member_b_approved_at);
+      if (s.status === "PENDING" && myApprovalPending) return 0;
+      if (s.status === "READY_FOR_FINAL_APPROVAL" && isSuperAdmin) return 0;
+      if (s.status === "PENDING" || s.status === "READY_FOR_FINAL_APPROVAL") return 1;
+      return 2;
+    };
+    return rank(a) - rank(b);
+  });
+
   return (
     <Card className="p-4">
-      <SectionTitle
-        action={
-          !showForm && (
-            <button onClick={() => setShowForm(true)} className="text-sm font-medium text-brand-600 hover:underline">
-              Request a swap
-            </button>
-          )
-        }
-      >
-        Position Swap Requests
-      </SectionTitle>
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
+        <h2 className="flex min-w-0 items-center gap-1.5 text-sm font-semibold uppercase tracking-wide text-slate-500">
+          <SwapIcon width={16} height={16} className="shrink-0" /> Swap Requests
+        </h2>
+        {!showForm && (
+          <button onClick={() => setShowForm(true)} className="shrink-0 text-sm font-medium text-brand-600 hover:underline">
+            Request a swap
+          </button>
+        )}
+      </div>
 
       {error && <ErrorBanner message={error} />}
 
@@ -469,13 +483,13 @@ function FortuneSwapRequests({
         />
       )}
 
-      {!isLoading && (!swaps || swaps.length === 0) && !showForm && (
-        <p className="mt-2 text-sm text-slate-500">No swap requests yet.</p>
+      {!isLoading && sorted.length === 0 && !showForm && (
+        <p className="mt-2 text-sm text-slate-500">No swap requests yet. A member can hold more than one open request at a time.</p>
       )}
 
-      {swaps && swaps.length > 0 && (
-        <div className="mt-3 divide-y divide-slate-100">
-          {swaps.map((s) => {
+      {sorted.length > 0 && (
+        <div className="mt-3 space-y-2">
+          {sorted.map((s) => {
             const myApprovalPending =
               (s.member_a_id === currentUserId && !s.member_a_approved_at) ||
               (s.member_b_id === currentUserId && !s.member_b_approved_at);
@@ -483,38 +497,59 @@ function FortuneSwapRequests({
             const canFinalApprove = s.status === "READY_FOR_FINAL_APPROVAL" && isSuperAdmin;
             const canReject = (s.status === "PENDING" || s.status === "READY_FOR_FINAL_APPROVAL") && (myApprovalPending || isSuperAdmin);
             const busy = busyId === s.id;
+            const needsAction = canApprove || canFinalApprove;
             return (
-              <div key={s.id} className="py-3">
-                <div className="flex items-center justify-between gap-2">
-                  <p className="text-sm font-semibold text-slate-900">
-                    {s.member_a_name} ⇄ {s.member_b_name}
-                    {s.member_a_position && s.member_b_position && (
-                      <span className="ml-1 font-normal text-slate-400">
-                        (#{s.member_a_position} ⇄ #{s.member_b_position})
-                      </span>
-                    )}
-                  </p>
+              <div
+                key={s.id}
+                className={`rounded-xl p-3 ${
+                  needsAction ? "bg-fortune-500/10 ring-1 ring-fortune-500/25" : "bg-slate-50 ring-1 ring-slate-100"
+                }`}
+              >
+                <div className="flex flex-wrap items-start justify-between gap-x-2 gap-y-1.5">
+                  <div className="flex min-w-0 items-center gap-2.5">
+                    <div className="flex -space-x-2.5 shrink-0">
+                      <Avatar name={s.member_a_name} photoUrl={s.member_a_photo} size={30} />
+                      <Avatar name={s.member_b_name} photoUrl={s.member_b_photo} size={30} />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-slate-900">
+                        {s.member_a_id === currentUserId ? "You" : s.member_a_name}
+                        <span className="mx-1 text-slate-300">⇄</span>
+                        {s.member_b_id === currentUserId ? "You" : s.member_b_name}
+                      </p>
+                      {s.member_a_position && s.member_b_position && (
+                        <p className="text-xs text-slate-400">Position #{s.member_a_position} ⇄ #{s.member_b_position}</p>
+                      )}
+                    </div>
+                  </div>
                   <StatusBadge status={s.status} />
                 </div>
-                {s.reason && <p className="mt-0.5 text-xs text-slate-500">Reason: {s.reason}</p>}
-                <p className="mt-0.5 text-xs text-slate-400">Requested by {s.requested_by_name}</p>
-                {s.status === "REJECTED" && s.rejection_reason && (
-                  <p className="mt-0.5 text-xs text-rose-600">Declined: {s.rejection_reason}</p>
+
+                {needsAction && (
+                  <p className="mt-2 text-xs font-semibold text-fortune-600">
+                    {canFinalApprove ? "Ready for your final approval" : "Your approval is needed"}
+                  </p>
                 )}
+                {s.reason && <p className="mt-2 text-xs text-slate-500">Reason: {s.reason}</p>}
+                <p className="mt-1 text-xs text-slate-400">Requested by {s.requested_by_name}</p>
+                {s.status === "REJECTED" && s.rejection_reason && (
+                  <p className="mt-1 text-xs text-rose-600">Declined: {s.rejection_reason}</p>
+                )}
+
                 {(canApprove || canFinalApprove || canReject || isSuperAdmin) && (
-                  <div className="mt-2 flex flex-wrap gap-2">
+                  <div className="mt-3 flex flex-wrap gap-2">
                     {canApprove && (
                       <Button className="px-3 py-2 text-xs" disabled={busy} onClick={() => act(s.id, `${s.id}/approve`)}>
                         Approve
                       </Button>
                     )}
                     {canFinalApprove && (
-                      <Button className="px-3 py-2 text-xs" disabled={busy} onClick={() => act(s.id, `${s.id}/approve-final`)}>
+                      <Button className="bg-fortune-600 px-3 py-2 text-xs hover:bg-fortune-600/90" disabled={busy} onClick={() => act(s.id, `${s.id}/approve-final`)}>
                         Give Final Approval & Swap
                       </Button>
                     )}
                     {canReject && (
-                      <Button variant="secondary" className="px-3 py-2 text-xs" disabled={busy} onClick={() => act(s.id, `${s.id}/reject`)}>
+                      <Button variant="secondary" className="px-3 py-2 text-xs !text-rose-600" disabled={busy} onClick={() => act(s.id, `${s.id}/reject`)}>
                         Decline
                       </Button>
                     )}
@@ -522,7 +557,7 @@ function FortuneSwapRequests({
                       <button
                         disabled={busy}
                         onClick={() => remove(s.id)}
-                        className="text-xs font-medium text-slate-400 hover:text-rose-600 disabled:opacity-50"
+                        className="ml-auto text-xs font-medium text-slate-400 hover:text-rose-600 disabled:opacity-50"
                       >
                         Delete
                       </button>
@@ -575,10 +610,13 @@ function SwapRequestForm({
     }
   }
 
+  const memberA = members.find((m) => m.user_id === memberAId);
+  const memberB = members.find((m) => m.user_id === memberBId);
+
   return (
     <form onSubmit={submit} className="mt-3 space-y-3 rounded-xl border border-slate-100 p-3">
       <div className="grid grid-cols-2 gap-3">
-        <Field label={isSuperAdmin ? "Member A" : "You"}>
+        <Field label={isSuperAdmin ? "First member" : "You"}>
           {isSuperAdmin ? (
             <select className={inputClass} value={memberAId} onChange={(e) => setMemberAId(e.target.value)}>
               <option value="">Select…</option>
@@ -605,6 +643,17 @@ function SwapRequestForm({
           </select>
         </Field>
       </div>
+
+      {memberA && memberB && (
+        <div className="flex items-center gap-2 rounded-lg bg-slate-50 px-3 py-2">
+          <Avatar name={memberA.name} photoUrl={memberA.photo_url} size={24} />
+          <span className="text-xs font-medium text-slate-600">
+            {isSuperAdmin ? memberA.name : "You"} will swap Fortune positions with {memberB.name}
+          </span>
+          <Avatar name={memberB.name} photoUrl={memberB.photo_url} size={24} />
+        </div>
+      )}
+
       <Field label="Reason" hint="Optional">
         <input className={inputClass} value={reason} onChange={(e) => setReason(e.target.value)} />
       </Field>

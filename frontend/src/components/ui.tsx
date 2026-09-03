@@ -72,7 +72,7 @@ const STATUS_LABELS: Record<string, string> = {
   WAITING_COLLECTION: "Waiting for Collection",
   READY: "Ready",
   PROCESSING: "Processing",
-  READY_FOR_FINAL_APPROVAL: "Awaiting Final Approval",
+  READY_FOR_FINAL_APPROVAL: "Final Approval",
   APPROVED: "Swapped",
 };
 

@@ -4,6 +4,7 @@ import { useAuth } from "../lib/AuthContext";
 import { ApiError } from "../lib/api";
 import { Button, ErrorBanner, Field, inputClass } from "../components/ui";
 import { Wordmark } from "../components/Logo";
+import { InstallAppPrompt } from "../components/InstallAppPrompt";
 
 export default function LoginPage() {
   const { login } = useAuth();
@@ -33,6 +34,8 @@ export default function LoginPage() {
         <Wordmark size={40} />
         <p className="mt-1 text-center text-sm text-slate-500">Save Together. Receive in Order.</p>
       </div>
+
+      <InstallAppPrompt />
 
       <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-900/5">
         <h1 className="mb-1 text-xl font-bold text-slate-900">Welcome back</h1>

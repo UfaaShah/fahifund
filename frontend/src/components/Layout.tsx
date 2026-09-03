@@ -117,7 +117,7 @@ export function Layout() {
         </div>
       </aside>
 
-      <div className="flex min-h-dvh flex-1 flex-col">
+      <div className="flex min-h-dvh min-w-0 flex-1 flex-col">
         {/* Top bar */}
         <header className="gpu-fixed sticky top-0 z-20 flex items-center justify-between border-b border-slate-200 bg-white/90 px-4 py-3 backdrop-blur md:px-8">
           <div className="flex items-center gap-2 md:hidden">
@@ -138,7 +138,13 @@ export function Layout() {
           </div>
         </header>
 
-        <main className="flex-1 px-4 pb-28 pt-4 md:px-8 md:pb-10 md:pt-6">
+        {/* min-w-0 here (and on the flex column above) stops deep unbreakable content —
+            e.g. a `truncate` (white-space: nowrap) name that's wider than the viewport —
+            from forcing this whole flex column wider than the screen. Without it, a flex
+            item's default min-width is its content's natural width, not 0, so a single
+            long nowrap run anywhere inside can silently push the entire app shell into
+            horizontal overflow. */}
+        <main className="min-w-0 flex-1 px-4 pb-28 pt-4 md:px-8 md:pb-10 md:pt-6">
           <Outlet />
         </main>
 

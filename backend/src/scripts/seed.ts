@@ -41,12 +41,12 @@ export async function seedDemoData() {
   const superAdminId = newId();
   db.prepare(
     `INSERT INTO users (id, member_code, name, email, phone, password_hash, role) VALUES (?, 'FF-0000', ?, ?, ?, ?, 'SUPER_ADMIN')`
-  ).run(superAdminId, "Ahmed Shah", "ahmed.shah@fahifund.com", "+9607700001", passwordHash);
+  ).run(superAdminId, "Ufaa", null, "9994000", passwordHash);
 
   console.log("Bootstrap complete.\n");
   console.log("Super Admin account:");
-  console.log("  Name     — Ahmed Shah");
-  console.log("  Login    — ahmed.shah@fahifund.com");
+  console.log("  Name     — Ufaa");
+  console.log("  Login    — 9994000 (mobile number)");
   console.log("  Password — welcome123 (change this after logging in via Profile → Change Password)");
 }
 

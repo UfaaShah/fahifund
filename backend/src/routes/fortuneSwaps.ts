@@ -103,14 +103,19 @@ router.post("/", authenticate, (req: AuthedRequest, res) => {
   const { blocked, reason: blockReason } = hasCompletedPayoutBlocking(fundId, memberAId, memberBId);
   if (blocked) return res.status(400).json({ error: blockReason });
 
+  // A member can be named in more than one open swap request at a time (e.g. two different
+  // people each ask to swap with them) — only the exact same pair, already open, is blocked.
+  // Each request is independently approved and, at Super Admin's final approval, executed
+  // against whatever the two members' positions are at that moment — so if an earlier swap
+  // already moved one of them, a later one still swaps correctly from their new position.
   const existing = db
     .prepare(
       `SELECT id FROM fortune_swap_requests WHERE fund_id = ? AND status IN ('PENDING','READY_FOR_FINAL_APPROVAL')
-       AND (member_a_id IN (?, ?) OR member_b_id IN (?, ?))`
+       AND ((member_a_id = ? AND member_b_id = ?) OR (member_a_id = ? AND member_b_id = ?))`
     )
-    .get(fundId, memberAId, memberBId, memberAId, memberBId);
+    .get(fundId, memberAId, memberBId, memberBId, memberAId);
   if (existing) {
-    return res.status(409).json({ error: "One of these members already has an open swap request pending" });
+    return res.status(409).json({ error: "There's already an open swap request between these two members" });
   }
 
   const now = new Date().toISOString();
