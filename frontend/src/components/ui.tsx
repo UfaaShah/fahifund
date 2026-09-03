@@ -47,6 +47,8 @@ const STATUS_STYLES: Record<string, string> = {
   WAITING_COLLECTION: "bg-slate-100 text-slate-600",
   READY: "bg-fortune-500/15 text-fortune-600",
   PROCESSING: "bg-fortune-500/15 text-fortune-600",
+  READY_FOR_FINAL_APPROVAL: "bg-fortune-500/15 text-fortune-600",
+  APPROVED: "bg-brand-100 text-brand-700",
 };
 
 const STATUS_LABELS: Record<string, string> = {
@@ -68,6 +70,8 @@ const STATUS_LABELS: Record<string, string> = {
   WAITING_COLLECTION: "Waiting for Collection",
   READY: "Ready",
   PROCESSING: "Processing",
+  READY_FOR_FINAL_APPROVAL: "Awaiting Final Approval",
+  APPROVED: "Swapped",
 };
 
 export function StatusBadge({ status }: { status: string | MonthStatus }) {

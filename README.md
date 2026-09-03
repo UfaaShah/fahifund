@@ -218,7 +218,13 @@ hidden in the UI:
 - Fund creation, member management, Admin assignment (with an audit trail note that the new
   Admin's bank account becomes the collection account going forward)
 - Fortune Wheel: cryptographically-random shuffle, animated spin + sequential reveal, explicit
-  lock step, and a Super-Admin-only reset path that's blocked once any payment has been confirmed
+  lock step, and a Super-Admin-only reset path that's blocked once any payment has been confirmed.
+  For a round whose receiving order was already decided outside the app, "Enter a known order"
+  lets the Super Admin tap members into the exact sequence instead of spinning.
+- Add Member supports both a single form (only name + phone are required) and a "Paste a list"
+  bulk mode — one member per line as `Name, Phone, Email` (email optional) — for onboarding a
+  whole round's membership at once. Bad or duplicate rows are skipped with a reason; the rest of
+  the batch still goes through.
 - The monthly cycle (open → deposits → verification → collection complete → payout → next month)
   is derived live from payment/payout data, not a separate state machine that can drift out of
   sync

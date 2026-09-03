@@ -26,7 +26,7 @@ export default function ProfilePage() {
       </div>
 
       <Card className="grid grid-cols-1 gap-3 p-4 text-sm">
-        <Row label="Email" value={user!.email} />
+        <Row label="Email" value={user!.email || "Not set"} />
         <Row label="Mobile" value={user!.phone} />
       </Card>
 

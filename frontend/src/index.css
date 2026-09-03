@@ -24,6 +24,23 @@ body {
   background-color: #f6f8f7;
   color: #101828;
   -webkit-tap-highlight-color: transparent;
+  /* Stops pull-to-refresh / rubber-band bounce from scroll-chaining past the
+     page edges — one of the things that makes an installed PWA feel like a
+     real app instead of a website in a wrapper. */
+  overscroll-behavior-y: contain;
+}
+
+/* Mobile browsers (esp. iOS Safari) can visibly stutter or momentarily
+ * "freeze" a `position: sticky`/`fixed` bar during momentum scrolling when
+ * it isn't promoted to its own compositor layer — worse still when it also
+ * has a backdrop-blur, which is expensive to repaint every scroll frame.
+ * Forcing a layer with `translateZ(0)` fixes this on the top and bottom
+ * app bars. */
+.gpu-fixed {
+  transform: translateZ(0);
+  -webkit-transform: translateZ(0);
+  will-change: transform;
+  backface-visibility: hidden;
 }
 
 * {

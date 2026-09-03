@@ -75,9 +75,9 @@ export function Layout() {
   const items = NAV[user.role];
 
   return (
-    <div className="mx-auto flex min-h-screen max-w-7xl bg-[#f6f8f7]">
+    <div className="mx-auto flex min-h-dvh max-w-7xl bg-[#f6f8f7]">
       {/* Desktop sidebar */}
-      <aside className="sticky top-0 hidden h-screen w-64 shrink-0 flex-col border-r border-slate-200 bg-white px-4 py-6 md:flex">
+      <aside className="sticky top-0 hidden h-dvh w-64 shrink-0 flex-col border-r border-slate-200 bg-white px-4 py-6 md:flex">
         <div className="mb-8 px-2">
           <Wordmark />
         </div>
@@ -117,9 +117,9 @@ export function Layout() {
         </div>
       </aside>
 
-      <div className="flex min-h-screen flex-1 flex-col">
+      <div className="flex min-h-dvh flex-1 flex-col">
         {/* Top bar */}
-        <header className="sticky top-0 z-20 flex items-center justify-between border-b border-slate-200 bg-white/90 px-4 py-3 backdrop-blur md:px-8">
+        <header className="gpu-fixed sticky top-0 z-20 flex items-center justify-between border-b border-slate-200 bg-white/90 px-4 py-3 backdrop-blur md:px-8">
           <div className="flex items-center gap-2 md:hidden">
             <Logo size={28} />
             <span className="font-bold text-slate-900">Fahi Fund</span>
@@ -143,7 +143,7 @@ export function Layout() {
         </main>
 
         {/* Mobile bottom nav */}
-        <nav className="safe-bottom fixed inset-x-0 bottom-0 z-20 border-t border-slate-200 bg-white/95 backdrop-blur md:hidden">
+        <nav className="gpu-fixed safe-bottom fixed inset-x-0 bottom-0 z-20 border-t border-slate-200 bg-white/95 backdrop-blur md:hidden">
           <div className="mx-auto flex max-w-lg items-stretch justify-between px-1">
             {items.map((item) => (
               <NavLink

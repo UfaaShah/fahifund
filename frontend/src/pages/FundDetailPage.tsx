@@ -1,11 +1,12 @@
 import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "../lib/AuthContext";
-import { useFund, useInvalidateFund, useUsers } from "../lib/queries";
+import { useFund, useFortuneSwaps, useInvalidateFund, useUsers } from "../lib/queries";
 import { api, ApiError } from "../lib/api";
 import { Card, LoadingScreen, StatusBadge, Button, ErrorBanner, SectionTitle, Field, inputClass } from "../components/ui";
 import { money, shortDate } from "../lib/format";
 import { BankIcon, ChevronRightIcon, UsersIcon, WheelIcon, ReportIcon, AuditIcon } from "../components/icons";
+import type { FundMemberRow } from "../lib/types";
 
 export default function FundDetailPage() {
   const { fundId } = useParams();
@@ -127,6 +128,10 @@ export default function FundDetailPage() {
             }
           }}
         />
+      )}
+
+      {f.fortuneLockedAt && f.status !== "COMPLETED" && f.status !== "CANCELLED" && (
+        <FortuneSwapRequests members={fund.members} viewerRole={fund.viewerRole} currentUserId={user!.id} />
       )}
 
       {isSuperAdmin && f.fortuneLockedAt && f.status !== "COMPLETED" && (
@@ -383,5 +388,235 @@ function ResetFortuneOrder({ fundId, onError }: { fundId: string; onError: (m: s
         </div>
       )}
     </Card>
+  );
+}
+
+function FortuneSwapRequests({
+  members,
+  viewerRole,
+  currentUserId,
+}: {
+  members: FundMemberRow[];
+  viewerRole: "SUPER_ADMIN" | "ADMIN" | "MEMBER";
+  currentUserId: string;
+}) {
+  const { fundId } = useParams();
+  const { data: swaps, isLoading } = useFortuneSwaps(fundId);
+  const invalidate = useInvalidateFund();
+  const [error, setError] = useState<string | null>(null);
+  const [showForm, setShowForm] = useState(false);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const isSuperAdmin = viewerRole === "SUPER_ADMIN";
+
+  async function act(id: string, action: string, body?: any) {
+    setError(null);
+    setBusyId(id);
+    try {
+      await api.post(`/funds/${fundId}/fortune-swaps/${action}`, body);
+      invalidate(fundId!);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Action failed");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function remove(id: string) {
+    setError(null);
+    setBusyId(id);
+    try {
+      await api.delete(`/funds/${fundId}/fortune-swaps/${id}`);
+      invalidate(fundId!);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to delete");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  return (
+    <Card className="p-4">
+      <SectionTitle
+        action={
+          !showForm && (
+            <button onClick={() => setShowForm(true)} className="text-sm font-medium text-brand-600 hover:underline">
+              Request a swap
+            </button>
+          )
+        }
+      >
+        Position Swap Requests
+      </SectionTitle>
+
+      {error && <ErrorBanner message={error} />}
+
+      {showForm && (
+        <SwapRequestForm
+          members={members}
+          isSuperAdmin={isSuperAdmin}
+          currentUserId={currentUserId}
+          onCancel={() => setShowForm(false)}
+          onSubmit={async (memberAId, memberBId, reason) => {
+            setError(null);
+            try {
+              await api.post(`/funds/${fundId}/fortune-swaps`, { memberAId, memberBId, reason: reason || undefined });
+              invalidate(fundId!);
+              setShowForm(false);
+            } catch (err) {
+              throw err;
+            }
+          }}
+        />
+      )}
+
+      {!isLoading && (!swaps || swaps.length === 0) && !showForm && (
+        <p className="mt-2 text-sm text-slate-500">No swap requests yet.</p>
+      )}
+
+      {swaps && swaps.length > 0 && (
+        <div className="mt-3 divide-y divide-slate-100">
+          {swaps.map((s) => {
+            const myApprovalPending =
+              (s.member_a_id === currentUserId && !s.member_a_approved_at) ||
+              (s.member_b_id === currentUserId && !s.member_b_approved_at);
+            const canApprove = s.status === "PENDING" && myApprovalPending;
+            const canFinalApprove = s.status === "READY_FOR_FINAL_APPROVAL" && isSuperAdmin;
+            const canReject = (s.status === "PENDING" || s.status === "READY_FOR_FINAL_APPROVAL") && (myApprovalPending || isSuperAdmin);
+            const busy = busyId === s.id;
+            return (
+              <div key={s.id} className="py-3">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-sm font-semibold text-slate-900">
+                    {s.member_a_name} ⇄ {s.member_b_name}
+                    {s.member_a_position && s.member_b_position && (
+                      <span className="ml-1 font-normal text-slate-400">
+                        (#{s.member_a_position} ⇄ #{s.member_b_position})
+                      </span>
+                    )}
+                  </p>
+                  <StatusBadge status={s.status} />
+                </div>
+                {s.reason && <p className="mt-0.5 text-xs text-slate-500">Reason: {s.reason}</p>}
+                <p className="mt-0.5 text-xs text-slate-400">Requested by {s.requested_by_name}</p>
+                {s.status === "REJECTED" && s.rejection_reason && (
+                  <p className="mt-0.5 text-xs text-rose-600">Declined: {s.rejection_reason}</p>
+                )}
+                {(canApprove || canFinalApprove || canReject || isSuperAdmin) && (
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {canApprove && (
+                      <Button className="px-3 py-2 text-xs" disabled={busy} onClick={() => act(s.id, `${s.id}/approve`)}>
+                        Approve
+                      </Button>
+                    )}
+                    {canFinalApprove && (
+                      <Button className="px-3 py-2 text-xs" disabled={busy} onClick={() => act(s.id, `${s.id}/approve-final`)}>
+                        Give Final Approval & Swap
+                      </Button>
+                    )}
+                    {canReject && (
+                      <Button variant="secondary" className="px-3 py-2 text-xs" disabled={busy} onClick={() => act(s.id, `${s.id}/reject`)}>
+                        Decline
+                      </Button>
+                    )}
+                    {isSuperAdmin && (
+                      <button
+                        disabled={busy}
+                        onClick={() => remove(s.id)}
+                        className="text-xs font-medium text-slate-400 hover:text-rose-600 disabled:opacity-50"
+                      >
+                        Delete
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function SwapRequestForm({
+  members,
+  isSuperAdmin,
+  currentUserId,
+  onCancel,
+  onSubmit,
+}: {
+  members: FundMemberRow[];
+  isSuperAdmin: boolean;
+  currentUserId: string;
+  onCancel: () => void;
+  onSubmit: (memberAId: string, memberBId: string, reason: string) => Promise<void>;
+}) {
+  const [memberAId, setMemberAId] = useState(isSuperAdmin ? "" : currentUserId);
+  const [memberBId, setMemberBId] = useState("");
+  const [reason, setReason] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const me = members.find((m) => m.user_id === currentUserId);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!memberAId || !memberBId || memberAId === memberBId) {
+      setErr("Choose two different members");
+      return;
+    }
+    setSaving(true);
+    setErr(null);
+    try {
+      await onSubmit(memberAId, memberBId, reason);
+    } catch (e2) {
+      setErr(e2 instanceof ApiError ? e2.message : "Failed to request swap");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <form onSubmit={submit} className="mt-3 space-y-3 rounded-xl border border-slate-100 p-3">
+      <div className="grid grid-cols-2 gap-3">
+        <Field label={isSuperAdmin ? "Member A" : "You"}>
+          {isSuperAdmin ? (
+            <select className={inputClass} value={memberAId} onChange={(e) => setMemberAId(e.target.value)}>
+              <option value="">Select…</option>
+              {members.map((m) => (
+                <option key={m.user_id} value={m.user_id}>
+                  {m.name}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <input className={inputClass} value={me?.name || "You"} disabled />
+          )}
+        </Field>
+        <Field label="Swap with">
+          <select className={inputClass} value={memberBId} onChange={(e) => setMemberBId(e.target.value)}>
+            <option value="">Select…</option>
+            {members
+              .filter((m) => m.user_id !== memberAId)
+              .map((m) => (
+                <option key={m.user_id} value={m.user_id}>
+                  {m.name}
+                </option>
+              ))}
+          </select>
+        </Field>
+      </div>
+      <Field label="Reason" hint="Optional">
+        <input className={inputClass} value={reason} onChange={(e) => setReason(e.target.value)} />
+      </Field>
+      {err && <p className="text-xs font-medium text-rose-600">{err}</p>}
+      <div className="flex gap-2">
+        <Button type="button" variant="secondary" onClick={onCancel}>
+          Cancel
+        </Button>
+        <Button type="submit" disabled={saving}>
+          {saving ? "Requesting…" : "Send request"}
+        </Button>
+      </div>
+    </form>
   );
 }

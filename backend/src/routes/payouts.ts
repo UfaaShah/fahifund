@@ -1,8 +1,9 @@
 import { Router } from "express";
+import { z } from "zod";
 import { db } from "../lib/db";
 import { newId } from "../lib/ids";
 import { authenticate, authorize, AuthedRequest } from "../middleware/auth";
-import { upload, publicUploadPath } from "../middleware/upload";
+import { upload, publicUploadPath, deleteUploadedFile } from "../middleware/upload";
 import { logAudit } from "../lib/audit";
 import { notify, notifyMany } from "../lib/notify";
 import { getFund, getCurrentMonthNumber, getMonthSummary, getActiveFundMembers } from "../lib/fundCycle";
@@ -116,5 +117,71 @@ router.post(
     res.json(getMonthSummary(fundId, monthNumber));
   }
 );
+
+const editPayoutSchema = z.object({
+  amount: z.number().positive().optional(),
+  status: z.enum(["WAITING_COLLECTION", "READY", "PROCESSING", "COMPLETED"]).optional(),
+  payoutDate: z.string().optional(),
+  referenceNumber: z.string().optional(),
+});
+
+// Super Admin override: directly edit any field on a payout record (e.g. to
+// fix a data-entry mistake made while re-entering a round's history), without
+// going through the normal complete-payout flow.
+router.patch("/:payoutId", authenticate, authorize("SUPER_ADMIN"), (req: AuthedRequest, res) => {
+  const payout = db.prepare("SELECT * FROM payouts WHERE id = ?").get(req.params.payoutId) as any;
+  if (!payout) return res.status(404).json({ error: "Payout not found" });
+  const fund = getFund(payout.fund_id)!;
+  const parsed = editPayoutSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
+  const d = parsed.data;
+  const next = {
+    amount: d.amount ?? payout.amount,
+    status: d.status ?? payout.status,
+    payout_date: d.payoutDate ?? payout.payout_date,
+    reference_number: d.referenceNumber ?? payout.reference_number,
+  };
+  db.prepare(`UPDATE payouts SET amount=?, status=?, payout_date=?, reference_number=? WHERE id=?`).run(
+    next.amount,
+    next.status,
+    next.payout_date,
+    next.reference_number,
+    payout.id
+  );
+
+  logAudit({
+    userId: req.user!.userId,
+    fundId: fund.id,
+    action: "EDIT_PAYOUT",
+    description: `Super Admin directly edited a month ${payout.month_number} payout record for "${fund.name}"`,
+  });
+
+  res.json(getMonthSummary(fund.id, payout.month_number));
+});
+
+// Super Admin override: permanently delete a payout record (and its uploaded
+// proof, if any).
+router.delete("/:payoutId", authenticate, authorize("SUPER_ADMIN"), (req: AuthedRequest, res) => {
+  const payout = db.prepare("SELECT * FROM payouts WHERE id = ?").get(req.params.payoutId) as any;
+  if (!payout) return res.status(404).json({ error: "Payout not found" });
+  const fund = getFund(payout.fund_id)!;
+
+  db.prepare("DELETE FROM payouts WHERE id = ?").run(payout.id);
+  deleteUploadedFile(payout.receipt_path);
+
+  // If deleting the final month's completed payout, the fund is no longer fully finished.
+  if (fund.status === "COMPLETED" && payout.month_number >= fund.duration_months) {
+    db.prepare("UPDATE funds SET status='ACTIVE' WHERE id=?").run(fund.id);
+  }
+
+  logAudit({
+    userId: req.user!.userId,
+    fundId: fund.id,
+    action: "DELETE_PAYOUT",
+    description: `Super Admin permanently deleted a month ${payout.month_number} payout record for "${fund.name}"`,
+  });
+
+  res.json(getMonthSummary(fund.id, payout.month_number));
+});
 
 export default router;

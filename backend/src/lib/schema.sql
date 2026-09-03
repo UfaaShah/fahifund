@@ -12,7 +12,7 @@ CREATE TABLE IF NOT EXISTS users (
   id            TEXT PRIMARY KEY,
   member_code   TEXT UNIQUE NOT NULL,
   name          TEXT NOT NULL,
-  email         TEXT UNIQUE NOT NULL,
+  email         TEXT UNIQUE,
   phone         TEXT UNIQUE NOT NULL,
   password_hash TEXT NOT NULL,
   role          TEXT NOT NULL DEFAULT 'USER',
@@ -72,6 +72,32 @@ CREATE TABLE IF NOT EXISTS fortune_orders (
   locked_at    TEXT,
   UNIQUE(fund_id, member_id),
   UNIQUE(fund_id, position)
+);
+
+-- Requests to swap two members' positions in an already-locked Fortune order.
+-- status: PENDING (waiting on the named member(s) to approve) |
+--         READY_FOR_FINAL_APPROVAL (both members approved, waiting on Super Admin) |
+--         APPROVED (Super Admin gave final approval — the swap has been executed) |
+--         REJECTED (declined by a named member or Super Admin)
+-- A requester who is one of the two named members is auto-approved on their own side.
+-- Super Admin's final approval is always a separate, explicit action, even when
+-- Super Admin was also the one who made the original request.
+CREATE TABLE IF NOT EXISTS fortune_swap_requests (
+  id                    TEXT PRIMARY KEY,
+  fund_id               TEXT NOT NULL REFERENCES funds(id),
+  requested_by_id       TEXT NOT NULL REFERENCES users(id),
+  member_a_id           TEXT NOT NULL REFERENCES users(id),
+  member_b_id           TEXT NOT NULL REFERENCES users(id),
+  reason                TEXT,
+  status                TEXT NOT NULL DEFAULT 'PENDING',
+  member_a_approved_at  TEXT,
+  member_b_approved_at  TEXT,
+  final_approved_by_id  TEXT REFERENCES users(id),
+  final_approved_at     TEXT,
+  rejected_by_id        TEXT REFERENCES users(id),
+  rejected_at           TEXT,
+  rejection_reason      TEXT,
+  created_at            TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
 );
 
 -- status: PENDING | SENT | CONFIRMED | REJECTED
@@ -143,3 +169,4 @@ CREATE INDEX IF NOT EXISTS idx_payments_fund_month ON payments(fund_id, month_nu
 CREATE INDEX IF NOT EXISTS idx_payouts_fund_month ON payouts(fund_id, month_number);
 CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_fund ON audit_logs(fund_id);
+CREATE INDEX IF NOT EXISTS idx_fortune_swap_requests_fund ON fortune_swap_requests(fund_id);

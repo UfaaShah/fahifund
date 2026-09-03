@@ -4,7 +4,7 @@ export interface AuthUser {
   id: string;
   memberCode: string;
   name: string;
-  email: string;
+  email: string | null;
   phone: string;
   role: Role;
   photoUrl: string | null;
@@ -110,7 +110,7 @@ export interface FundMemberRow {
   status: string;
   joined_at: string;
   name: string;
-  email: string;
+  email: string | null;
   phone: string;
   member_code: string;
   photo_url: string | null;
@@ -142,6 +142,33 @@ export interface AppNotification {
   type: string;
   isRead: boolean;
   createdAt: string;
+}
+
+export interface FortuneSwapRequest {
+  id: string;
+  fund_id: string;
+  requested_by_id: string;
+  member_a_id: string;
+  member_b_id: string;
+  reason: string | null;
+  status: "PENDING" | "READY_FOR_FINAL_APPROVAL" | "APPROVED" | "REJECTED";
+  member_a_approved_at: string | null;
+  member_b_approved_at: string | null;
+  final_approved_by_id: string | null;
+  final_approved_at: string | null;
+  rejected_by_id: string | null;
+  rejected_at: string | null;
+  rejection_reason: string | null;
+  created_at: string;
+  member_a_name: string;
+  member_a_code: string;
+  member_a_photo: string | null;
+  member_b_name: string;
+  member_b_code: string;
+  member_b_photo: string | null;
+  member_a_position: number | null;
+  member_b_position: number | null;
+  requested_by_name: string;
 }
 
 export interface AuditLogRow {

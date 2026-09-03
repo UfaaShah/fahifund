@@ -31,3 +31,15 @@ export const upload = multer({
 export function publicUploadPath(filename: string) {
   return `/uploads/${filename}`;
 }
+
+/** Best-effort delete of a previously-uploaded receipt/proof file from disk,
+ * given the public path stored on a payment/payout row (e.g. "/uploads/xyz.png").
+ * Used when Super Admin permanently deletes a payment or payout record. Never
+ * throws — a missing file (already cleaned up, or a legacy record) is fine. */
+export function deleteUploadedFile(publicPath: string | null | undefined) {
+  if (!publicPath) return;
+  const filename = path.basename(publicPath);
+  fs.unlink(path.join(uploadDir, filename), () => {
+    /* ignore errors — best effort cleanup */
+  });
+}

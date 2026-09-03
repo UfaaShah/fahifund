@@ -339,6 +339,51 @@ router.post("/:id/fortune-wheel/generate", authenticate, authorize("SUPER_ADMIN"
   res.json({ order: getFortuneOrder(fund.id) });
 });
 
+// For a round that already had its receiving order decided outside the app (e.g. a physical
+// draw done before the members were entered here) — sets a specific order instead of
+// generating a random one. Same downstream effect as /generate (still requires /lock to
+// finalize), just with the Super Admin supplying the sequence.
+router.post("/:id/fortune-wheel/set-order", authenticate, authorize("SUPER_ADMIN"), (req: AuthedRequest, res) => {
+  const fund = getFund(req.params.id);
+  if (!fund) return res.status(404).json({ error: "Fund not found" });
+  if (fund.fortune_locked_at) return res.status(400).json({ error: "The Fortune order is already locked for this fund" });
+
+  const order = req.body?.order;
+  if (!Array.isArray(order) || order.length === 0) {
+    return res.status(400).json({ error: 'Provide a non-empty "order" array of member user IDs' });
+  }
+
+  const members = getActiveFundMembers(fund.id);
+  if (members.length === 0) return res.status(400).json({ error: "Add members before setting the Fortune order" });
+
+  const memberIds = new Set(members.map((m: any) => m.user_id));
+  const uniqueOrder = new Set(order);
+  if (uniqueOrder.size !== order.length) {
+    return res.status(400).json({ error: "The order list has a duplicate member" });
+  }
+  if (order.length !== members.length || [...uniqueOrder].some((id) => !memberIds.has(id as string))) {
+    return res.status(400).json({ error: "The order list must include every current member of this fund exactly once" });
+  }
+
+  const tx = db.transaction(() => {
+    db.prepare("DELETE FROM fortune_orders WHERE fund_id = ?").run(fund.id);
+    const stmt = db.prepare(
+      `INSERT INTO fortune_orders (id, fund_id, member_id, position, month_number) VALUES (?, ?, ?, ?, ?)`
+    );
+    (order as string[]).forEach((userId, idx) => stmt.run(newId(), fund.id, userId, idx + 1, idx + 1));
+    db.prepare("UPDATE funds SET status = 'FORTUNE_PENDING' WHERE id = ?").run(fund.id);
+  });
+  tx();
+
+  logAudit({
+    userId: req.user!.userId,
+    fundId: fund.id,
+    action: "FORTUNE_WHEEL_SPIN",
+    description: `Super Admin entered a pre-decided Fortune order for "${fund.name}" (${order.length} members)`,
+  });
+  res.json({ order: getFortuneOrder(fund.id) });
+});
+
 router.post("/:id/fortune-wheel/lock", authenticate, authorize("SUPER_ADMIN"), (req: AuthedRequest, res) => {
   const fund = getFund(req.params.id);
   if (!fund) return res.status(404).json({ error: "Fund not found" });

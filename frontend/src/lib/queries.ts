@@ -3,6 +3,7 @@ import { api } from "./api";
 import type {
   AppNotification,
   AuditLogRow,
+  FortuneSwapRequest,
   FundDetail,
   FundOverview,
   MonthSummary,
@@ -52,6 +53,14 @@ export function usePayoutHistory(fundId?: string) {
   });
 }
 
+export function useFortuneSwaps(fundId?: string) {
+  return useQuery({
+    queryKey: ["fortune-swaps", fundId],
+    queryFn: () => api.get<FortuneSwapRequest[]>(`/funds/${fundId}/fortune-swaps`),
+    enabled: !!fundId,
+  });
+}
+
 export function useMyPayments(fundId?: string) {
   return useQuery({
     queryKey: ["my-payments", fundId],
@@ -90,6 +99,7 @@ export function useInvalidateFund() {
     qc.invalidateQueries({ queryKey: ["current-payout", fundId] });
     qc.invalidateQueries({ queryKey: ["payout-history", fundId] });
     qc.invalidateQueries({ queryKey: ["my-payments", fundId] });
+    qc.invalidateQueries({ queryKey: ["fortune-swaps", fundId] });
     qc.invalidateQueries({ queryKey: ["audit-logs"] });
     qc.invalidateQueries({ queryKey: ["dashboard-super-admin"] });
     qc.invalidateQueries({ queryKey: ["notifications"] });
