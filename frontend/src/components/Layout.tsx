@@ -119,7 +119,7 @@ export function Layout() {
 
       <div className="flex min-h-dvh min-w-0 flex-1 flex-col">
         {/* Top bar */}
-        <header className="gpu-fixed sticky top-0 z-20 flex items-center justify-between border-b border-slate-200 bg-white/90 px-4 py-3 backdrop-blur md:px-8">
+        <header className="gpu-fixed safe-top sticky top-0 z-20 flex items-center justify-between border-b border-slate-200 bg-white/90 px-4 py-3 backdrop-blur md:px-8">
           <div className="flex items-center gap-2 md:hidden">
             <Logo size={28} />
             <span className="font-bold text-slate-900">Fahi Fund</span>
