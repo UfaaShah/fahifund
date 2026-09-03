@@ -240,7 +240,7 @@ router.get("/:id/members", authenticate, (req: AuthedRequest, res) => {
   res.json(getActiveFundMembers(req.params.id));
 });
 
-const addMemberSchema = z.object({ userId: z.string().min(1) });
+const addMemberSchema = z.object({ userId: z.string().min(1), slots: z.number().int().min(1).max(20).optional() });
 
 router.post("/:id/members", authenticate, authorize("SUPER_ADMIN"), (req: AuthedRequest, res) => {
   const fund = getFund(req.params.id);
@@ -248,22 +248,56 @@ router.post("/:id/members", authenticate, authorize("SUPER_ADMIN"), (req: Authed
   if (fund.fortune_locked_at) return res.status(400).json({ error: "Members cannot be added after the Fortune order is locked" });
   const parsed = addMemberSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
+  const slots = parsed.data.slots ?? 1;
   const user = db.prepare("SELECT * FROM users WHERE id = ?").get(parsed.data.userId) as any;
   if (!user) return res.status(404).json({ error: "User not found" });
   const existing = db.prepare("SELECT * FROM fund_members WHERE fund_id = ? AND user_id = ?").get(fund.id, user.id) as any;
   if (existing) {
     if (existing.status === "ACTIVE") return res.status(409).json({ error: "This member is already in the fund" });
-    db.prepare("UPDATE fund_members SET status = 'ACTIVE' WHERE id = ?").run(existing.id);
+    db.prepare("UPDATE fund_members SET status = 'ACTIVE', slots = ? WHERE id = ?").run(slots, existing.id);
   } else {
     const maxRow = db.prepare("SELECT MAX(member_number) as m FROM fund_members WHERE fund_id = ?").get(fund.id) as any;
     const memberNumber = (maxRow?.m || 0) + 1;
     db.prepare(
-      `INSERT INTO fund_members (id, fund_id, user_id, member_number) VALUES (?, ?, ?, ?)`
-    ).run(newId(), fund.id, user.id, memberNumber);
+      `INSERT INTO fund_members (id, fund_id, user_id, member_number, slots) VALUES (?, ?, ?, ?, ?)`
+    ).run(newId(), fund.id, user.id, memberNumber, slots);
   }
-  logAudit({ userId: req.user!.userId, fundId: fund.id, action: "ADD_FUND_MEMBER", description: `Super Admin added ${user.name} to "${fund.name}"` });
+  logAudit({
+    userId: req.user!.userId,
+    fundId: fund.id,
+    action: "ADD_FUND_MEMBER",
+    description: `Super Admin added ${user.name} to "${fund.name}"${slots > 1 ? ` with ${slots} slots` : ""}`,
+  });
   notify({ userId: user.id, title: "Added to a fund", message: `You've been added to "${fund.name}".`, type: "INFO" });
   res.status(201).json(getActiveFundMembers(fund.id));
+});
+
+const updateMemberSlotsSchema = z.object({ slots: z.number().int().min(1).max(20) });
+
+// Change how many slots (shares) a member holds in this fund — e.g. someone
+// who joined with 1 slot decides to take 2. Only while the Fortune order
+// isn't locked yet, since the order is generated from each member's slot
+// count and changing it afterwards would desync the two.
+router.patch("/:id/members/:userId", authenticate, authorize("SUPER_ADMIN"), (req: AuthedRequest, res) => {
+  const fund = getFund(req.params.id);
+  if (!fund) return res.status(404).json({ error: "Fund not found" });
+  if (fund.fortune_locked_at) return res.status(400).json({ error: "Slots can't be changed after the Fortune order is locked" });
+  const member = db
+    .prepare("SELECT * FROM fund_members WHERE fund_id = ? AND user_id = ? AND status = 'ACTIVE'")
+    .get(fund.id, req.params.userId) as any;
+  if (!member) return res.status(404).json({ error: "Member not found in this fund" });
+  const parsed = updateMemberSlotsSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
+
+  db.prepare("UPDATE fund_members SET slots = ? WHERE id = ?").run(parsed.data.slots, member.id);
+  const user = db.prepare("SELECT name FROM users WHERE id = ?").get(req.params.userId) as any;
+  logAudit({
+    userId: req.user!.userId,
+    fundId: fund.id,
+    action: "EDIT_MEMBER_SLOTS",
+    description: `Super Admin set ${user?.name ?? "a member"}'s slots to ${parsed.data.slots} in "${fund.name}"`,
+  });
+  res.json(getActiveFundMembers(fund.id));
 });
 
 router.delete("/:id/members/:userId", authenticate, authorize("SUPER_ADMIN"), (req: AuthedRequest, res) => {
@@ -317,9 +351,16 @@ router.post("/:id/fortune-wheel/generate", authenticate, authorize("SUPER_ADMIN"
   const members = getActiveFundMembers(fund.id);
   if (members.length === 0) return res.status(400).json({ error: "Add members before running the Fortune Wheel" });
 
+  // Expand each member into one pool entry per slot they hold — a 2-slot
+  // member gets 2 separate (not necessarily adjacent) turns in the order.
+  const pool: string[] = [];
+  members.forEach((m: any) => {
+    for (let i = 0; i < (m.slots || 1); i++) pool.push(m.user_id);
+  });
+
   // Fisher-Yates shuffle using a CSPRNG so the order is genuinely random and
-  // each member is selected exactly once.
-  const shuffled = [...members];
+  // each slot is selected exactly once.
+  const shuffled = [...pool];
   for (let i = shuffled.length - 1; i > 0; i--) {
     const j = crypto.randomInt(0, i + 1);
     [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
@@ -330,12 +371,12 @@ router.post("/:id/fortune-wheel/generate", authenticate, authorize("SUPER_ADMIN"
     const stmt = db.prepare(
       `INSERT INTO fortune_orders (id, fund_id, member_id, position, month_number) VALUES (?, ?, ?, ?, ?)`
     );
-    shuffled.forEach((m, idx) => stmt.run(newId(), fund.id, m.user_id, idx + 1, idx + 1));
+    shuffled.forEach((userId, idx) => stmt.run(newId(), fund.id, userId, idx + 1, idx + 1));
     db.prepare("UPDATE funds SET status = 'FORTUNE_PENDING' WHERE id = ?").run(fund.id);
   });
   tx();
 
-  logAudit({ userId: req.user!.userId, fundId: fund.id, action: "FORTUNE_WHEEL_SPIN", description: `Super Admin ran the Fortune Wheel for "${fund.name}" (${shuffled.length} members)` });
+  logAudit({ userId: req.user!.userId, fundId: fund.id, action: "FORTUNE_WHEEL_SPIN", description: `Super Admin ran the Fortune Wheel for "${fund.name}" (${shuffled.length} slots across ${members.length} member(s))` });
   res.json({ order: getFortuneOrder(fund.id) });
 });
 
@@ -356,13 +397,24 @@ router.post("/:id/fortune-wheel/set-order", authenticate, authorize("SUPER_ADMIN
   const members = getActiveFundMembers(fund.id);
   if (members.length === 0) return res.status(400).json({ error: "Add members before setting the Fortune order" });
 
-  const memberIds = new Set(members.map((m: any) => m.user_id));
-  const uniqueOrder = new Set(order);
-  if (uniqueOrder.size !== order.length) {
-    return res.status(400).json({ error: "The order list has a duplicate member" });
+  // A multi-slot member's user ID must appear in the list once per slot they
+  // hold (their separate turns can be anywhere in the sequence, not
+  // necessarily adjacent) — so this checks slot counts, not simple uniqueness.
+  const slotsById = new Map<string, number>(members.map((m: any) => [m.user_id, m.slots || 1]));
+  const totalSlots = [...slotsById.values()].reduce((sum, s) => sum + s, 0);
+  const counts = new Map<string, number>();
+  for (const id of order as string[]) counts.set(id, (counts.get(id) || 0) + 1);
+
+  if (order.length !== totalSlots) {
+    return res.status(400).json({ error: `The order list must contain exactly ${totalSlots} entries (one per slot)` });
   }
-  if (order.length !== members.length || [...uniqueOrder].some((id) => !memberIds.has(id as string))) {
-    return res.status(400).json({ error: "The order list must include every current member of this fund exactly once" });
+  for (const id of counts.keys()) {
+    if (!slotsById.has(id)) return res.status(400).json({ error: "The order list includes someone who isn't a current member of this fund" });
+  }
+  for (const [userId, slots] of slotsById) {
+    if ((counts.get(userId) || 0) !== slots) {
+      return res.status(400).json({ error: "The order list must include each member exactly as many times as the slots they hold" });
+    }
   }
 
   const tx = db.transaction(() => {

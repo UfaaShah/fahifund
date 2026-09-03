@@ -51,17 +51,24 @@ CREATE TABLE IF NOT EXISTS funds (
 );
 
 -- status: ACTIVE | REMOVED
+-- slots: how many shares of this fund the member holds (default 1). A member
+-- with 2 slots pays contribution_amount x 2 each month (one combined payment,
+-- one receipt, their same single account) and occupies 2 positions in the
+-- Fortune order, receiving 2 separate payouts across the round.
 CREATE TABLE IF NOT EXISTS fund_members (
   id            TEXT PRIMARY KEY,
   fund_id       TEXT NOT NULL REFERENCES funds(id),
   user_id       TEXT NOT NULL REFERENCES users(id),
   member_number INTEGER NOT NULL,
+  slots         INTEGER NOT NULL DEFAULT 1,
   status        TEXT NOT NULL DEFAULT 'ACTIVE',
   joined_at     TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
   UNIQUE(fund_id, user_id),
   UNIQUE(fund_id, member_number)
 );
 
+-- No UNIQUE(fund_id, member_id) here — a multi-slot member legitimately holds
+-- more than one position (one per slot), each in a different month.
 CREATE TABLE IF NOT EXISTS fortune_orders (
   id           TEXT PRIMARY KEY,
   fund_id      TEXT NOT NULL REFERENCES funds(id),
@@ -70,7 +77,6 @@ CREATE TABLE IF NOT EXISTS fortune_orders (
   month_number INTEGER NOT NULL,
   selected_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
   locked_at    TEXT,
-  UNIQUE(fund_id, member_id),
   UNIQUE(fund_id, position)
 );
 

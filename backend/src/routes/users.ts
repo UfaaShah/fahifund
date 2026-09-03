@@ -216,6 +216,31 @@ router.patch("/:id/status", authenticate, authorize("SUPER_ADMIN"), (req: Authed
   res.json(serializeUser(db.prepare("SELECT * FROM users WHERE id = ?").get(user.id)));
 });
 
+// Resets a member back to the app's default password — this is the action a Super Admin
+// takes after being notified (via /auth/forgot-password) that someone is locked out. There's
+// no email/SMS in this app, so this is the whole "reset flow": no token, no link.
+router.post("/:id/reset-password", authenticate, authorize("SUPER_ADMIN"), asyncHandler(async (req: AuthedRequest, res) => {
+  const user = db.prepare("SELECT * FROM users WHERE id = ?").get(req.params.id) as any;
+  if (!user) return res.status(404).json({ error: "User not found" });
+
+  const newHash = await hashPassword(DEFAULT_PASSWORD);
+  db.prepare("UPDATE users SET password_hash = ? WHERE id = ?").run(newHash, user.id);
+
+  logAudit({
+    userId: req.user!.userId,
+    action: "RESET_PASSWORD",
+    description: `Super Admin reset ${user.name}'s password to the default password`,
+  });
+  notify({
+    userId: user.id,
+    title: "Your password was reset",
+    message: `A Super Admin reset your password back to the default password. Please log in and change it from Profile → Change Password.`,
+    type: "WARNING",
+  });
+
+  res.json({ success: true, tempPassword: DEFAULT_PASSWORD });
+}));
+
 router.delete("/:id", authenticate, authorize("SUPER_ADMIN"), (req: AuthedRequest, res) => {
   const target = db.prepare("SELECT * FROM users WHERE id = ?").get(req.params.id) as any;
   if (!target) return res.status(404).json({ error: "User not found" });

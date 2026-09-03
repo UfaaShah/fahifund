@@ -1,7 +1,9 @@
 import type { ReactNode } from "react";
+import { useEffect } from "react";
 import { initials } from "../lib/format";
 import { assetUrl } from "../lib/api";
 import type { MonthStatus } from "../lib/types";
+import { CloseIcon } from "./icons";
 
 export function Card({ children, className = "" }: { children: ReactNode; className?: string }) {
   return <div className={`rounded-2xl bg-white shadow-sm ring-1 ring-slate-900/5 ${className}`}>{children}</div>;
@@ -159,6 +161,53 @@ export function Field({ label, children, hint }: { label: string; children: Reac
       {children}
       {hint && <span className="mt-1 block text-xs text-slate-400">{hint}</span>}
     </label>
+  );
+}
+
+export function SlideOver({
+  open,
+  onClose,
+  title,
+  children,
+}: {
+  open: boolean;
+  onClose: () => void;
+  title: string;
+  children: ReactNode;
+}) {
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", onKey);
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [open, onClose]);
+
+  if (!open) return null;
+
+  return (
+    <div className="fixed inset-0 z-50">
+      <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-[1px]" onClick={onClose} />
+      <div className="absolute inset-y-0 right-0 flex w-full max-w-md flex-col bg-white shadow-2xl animate-[slideInRight_0.25s_ease-out]">
+        <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
+          <h2 className="text-sm font-semibold text-slate-900">{title}</h2>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+          >
+            <CloseIcon width={20} height={20} />
+          </button>
+        </div>
+        <div className="min-h-0 flex-1 overflow-y-auto p-5">{children}</div>
+      </div>
+    </div>
   );
 }
 

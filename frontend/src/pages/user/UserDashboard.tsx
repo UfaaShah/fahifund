@@ -28,7 +28,11 @@ export default function UserDashboard() {
   }
 
   const myPayment = month?.payments.find((p) => p.member_id === user!.id);
-  const myOrderEntry = detail?.fortuneOrder.find((o) => o.member_id === user!.id);
+  // Most members hold exactly one slot; a multi-slot member holds one
+  // position per slot, so this can be more than one entry.
+  const myOrderEntries = detail?.fortuneOrder.filter((o) => o.member_id === user!.id) ?? [];
+  const myMembership = detail?.members.find((m) => m.user_id === user!.id);
+  const mySlots = myMembership?.slots || 1;
   const fund = primary.fund;
   const isFundCompleted = primary.isCompleted;
 
@@ -54,7 +58,10 @@ export default function UserDashboard() {
       ) : (
         <>
           <div className="grid grid-cols-2 gap-3">
-            <StatCard label="My Monthly Contribution" value={money(fund.contributionAmount, fund.currency)} />
+            <StatCard
+              label={mySlots > 1 ? `My Monthly Contribution (${mySlots} slots)` : "My Monthly Contribution"}
+              value={money(fund.contributionAmount * mySlots, fund.currency)}
+            />
             <StatCard label="Current Month" value={primary.currentMonth ? monthLabel(fund.startDate, primary.currentMonth) : "—"} />
           </div>
 
@@ -81,10 +88,17 @@ export default function UserDashboard() {
           )}
 
           <div className="grid grid-cols-2 gap-3">
-            <StatCard label="My Fortune Position" value={myOrderEntry ? `#${myOrderEntry.position}` : "—"} />
             <StatCard
-              label="My Payout Month"
-              value={myOrderEntry ? monthLabel(fund.startDate, myOrderEntry.month_number) : "—"}
+              label={myOrderEntries.length > 1 ? "My Fortune Positions" : "My Fortune Position"}
+              value={myOrderEntries.length > 0 ? myOrderEntries.map((o) => `#${o.position}`).join(", ") : "—"}
+            />
+            <StatCard
+              label={myOrderEntries.length > 1 ? "My Payout Months" : "My Payout Month"}
+              value={
+                myOrderEntries.length > 0
+                  ? myOrderEntries.map((o) => monthLabel(fund.startDate, o.month_number)).join(", ")
+                  : "—"
+              }
             />
           </div>
 

@@ -26,7 +26,9 @@ export default function FortuneOrderPage() {
   }
 
   const currentMonth = fund.currentMonth;
-  const mine = fund.fortuneOrder.find((o) => o.member_id === user!.id);
+  // Most members hold exactly one slot (one position); a multi-slot member
+  // holds one per slot, so this shows all of them, not just the first.
+  const mine = fund.fortuneOrder.filter((o) => o.member_id === user!.id);
 
   return (
     <div className="space-y-5">
@@ -35,13 +37,19 @@ export default function FortuneOrderPage() {
         <p className="text-sm text-slate-500">{fund.fund.name} — locked and final</p>
       </div>
 
-      {mine && (
+      {mine.length > 0 && (
         <Card className="bg-brand-600 p-5 text-white">
-          <p className="text-sm font-medium text-brand-100">Your position</p>
-          <p className="mt-1 text-3xl font-bold">#{mine.position}</p>
-          <p className="mt-1 text-sm text-brand-100">
-            {fund.isCompleted ? "Already received" : `Estimated month: ${monthLabel(fund.fund.startDate, mine.month_number)}`}
-          </p>
+          <p className="text-sm font-medium text-brand-100">{mine.length > 1 ? "Your positions" : "Your position"}</p>
+          <div className={mine.length > 1 ? "mt-2 space-y-2" : ""}>
+            {mine.map((m) => (
+              <div key={m.id}>
+                <p className="text-3xl font-bold">#{m.position}</p>
+                <p className="text-sm text-brand-100">
+                  {fund.isCompleted ? "Already received" : `Estimated month: ${monthLabel(fund.fund.startDate, m.month_number)}`}
+                </p>
+              </div>
+            ))}
+          </div>
         </Card>
       )}
 

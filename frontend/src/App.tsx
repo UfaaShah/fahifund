@@ -6,7 +6,6 @@ import type { Role } from "./lib/types";
 
 import LoginPage from "./pages/LoginPage";
 import ForgotPasswordPage from "./pages/ForgotPasswordPage";
-import ResetPasswordPage from "./pages/ResetPasswordPage";
 import RoleDashboard from "./pages/RoleDashboard";
 import MyFundsPage from "./pages/MyFundsPage";
 import FundDetailPage from "./pages/FundDetailPage";
@@ -48,7 +47,6 @@ export default function App() {
     <Routes>
       <Route path="/login" element={loading ? <LoadingScreen /> : user ? <Navigate to="/app" replace /> : <LoginPage />} />
       <Route path="/forgot-password" element={<ForgotPasswordPage />} />
-      <Route path="/reset-password" element={<ResetPasswordPage />} />
 
       <Route
         path="/app"

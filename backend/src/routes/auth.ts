@@ -1,11 +1,10 @@
 import { Router } from "express";
-import crypto from "crypto";
 import { z } from "zod";
 import { db } from "../lib/db";
 import { hashPassword, verifyPassword, signToken } from "../lib/auth";
-import { newId } from "../lib/ids";
 import { authenticate, AuthedRequest } from "../middleware/auth";
 import { logAudit } from "../lib/audit";
+import { notifyMany } from "../lib/notify";
 import { asyncHandler } from "../lib/asyncHandler";
 
 const router = Router();
@@ -82,50 +81,32 @@ router.post("/change-password", authenticate, asyncHandler(async (req: AuthedReq
   res.json({ success: true });
 }));
 
-const forgotSchema = z.object({ identifier: z.string().min(1) });
+const forgotSchema = z.object({ phone: z.string().min(1, "Mobile number is required") });
 
-// Demo-friendly forgot-password flow: since this environment can't send real
-// email/SMS, the reset token is returned directly in the response (clearly
-// marked). In production this would be emailed/texted instead of returned.
+// This app has no email/SMS provider, so "forgot password" doesn't send a link at all —
+// it notifies every Super Admin that this member needs a reset, and a Super Admin resets
+// them back to the default password from Members management (see POST /users/:id/reset-password).
 router.post("/forgot-password", (req, res) => {
   const parsed = forgotSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
-  const user = db
-    .prepare("SELECT * FROM users WHERE email = ? OR phone = ?")
-    .get(parsed.data.identifier, parsed.data.identifier) as any;
-  // Always respond success to avoid leaking which accounts exist.
-  if (!user) return res.json({ success: true });
+  const user = db.prepare("SELECT * FROM users WHERE phone = ?").get(parsed.data.phone) as any;
 
-  const rawToken = crypto.randomBytes(24).toString("hex");
-  const tokenHash = crypto.createHash("sha256").update(rawToken).digest("hex");
-  const expiresAt = new Date(Date.now() + 30 * 60 * 1000).toISOString();
-  db.prepare(
-    `INSERT INTO password_resets (id, user_id, token_hash, expires_at) VALUES (?, ?, ?, ?)`
-  ).run(newId(), user.id, tokenHash, expiresAt);
-
-  res.json({ success: true, devResetToken: rawToken, note: "In production this token is emailed/texted, not returned by the API." });
-});
-
-const resetSchema = z.object({
-  token: z.string().min(1),
-  newPassword: z.string().min(6, "New password must be at least 6 characters"),
-});
-
-router.post("/reset-password", asyncHandler(async (req, res) => {
-  const parsed = resetSchema.safeParse(req.body);
-  if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
-  const tokenHash = crypto.createHash("sha256").update(parsed.data.token).digest("hex");
-  const record = db
-    .prepare("SELECT * FROM password_resets WHERE token_hash = ? AND used_at IS NULL")
-    .get(tokenHash) as any;
-  if (!record || new Date(record.expires_at).getTime() < Date.now()) {
-    return res.status(400).json({ error: "Reset link is invalid or has expired" });
+  // Always respond success either way, so this can't be used to probe which mobile numbers
+  // have an account.
+  if (user) {
+    const superAdmins = db.prepare("SELECT id FROM users WHERE role = 'SUPER_ADMIN'").all() as { id: string }[];
+    notifyMany(
+      superAdmins.map((s) => s.id),
+      {
+        title: "Password reset requested",
+        message: `${user.name} (${user.member_code} · ${user.phone}) can't log in and requested a password reset. Reset them to the default password from Members.`,
+        type: "WARNING",
+      }
+    );
+    logAudit({ userId: user.id, action: "REQUEST_PASSWORD_RESET", description: `${user.name} requested a password reset` });
   }
-  const newHash = await hashPassword(parsed.data.newPassword);
-  db.prepare("UPDATE users SET password_hash = ? WHERE id = ?").run(newHash, record.user_id);
-  db.prepare("UPDATE password_resets SET used_at = ? WHERE id = ?").run(new Date().toISOString(), record.id);
-  logAudit({ userId: record.user_id, action: "RESET_PASSWORD", description: "Password reset via forgot-password flow" });
+
   res.json({ success: true });
-}));
+});
 
 export default router;

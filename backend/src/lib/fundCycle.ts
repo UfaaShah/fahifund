@@ -91,7 +91,10 @@ export function getMonthSummary(fundId: string, monthNumber: number): MonthSumma
   const fund = getFund(fundId)!;
   const members = getActiveFundMembers(fundId);
   const expectedMembers = members.length;
-  const expectedTotal = expectedMembers * fund.contribution_amount;
+  // A multi-slot member owes contribution_amount for each slot they hold, all
+  // in one combined payment — so the pot is the sum of each member's own
+  // required amount, not memberCount x contribution_amount.
+  const expectedTotal = members.reduce((sum, m) => sum + (m.slots || 1) * fund.contribution_amount, 0);
 
   const payments = db
     .prepare(

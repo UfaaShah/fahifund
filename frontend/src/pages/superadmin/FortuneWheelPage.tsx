@@ -86,12 +86,18 @@ export default function FortuneWheelPage() {
     }
   }
 
+  // A multi-slot member can be tapped again for each additional slot they
+  // hold — they'll end up with that many separate turns in the order.
   function pickMember(m: FundMemberRow) {
-    setManualPicks((picks) => (picks.some((p) => p.user_id === m.user_id) ? picks : [...picks, m]));
+    setManualPicks((picks) => {
+      const usedSoFar = picks.filter((p) => p.user_id === m.user_id).length;
+      if (usedSoFar >= (m.slots || 1)) return picks;
+      return [...picks, m];
+    });
   }
 
-  function unpickMember(userId: string) {
-    setManualPicks((picks) => picks.filter((p) => p.user_id !== userId));
+  function unpickAt(index: number) {
+    setManualPicks((picks) => picks.filter((_, i) => i !== index));
   }
 
   async function saveManualOrder() {
@@ -110,7 +116,8 @@ export default function FortuneWheelPage() {
     }
   }
 
-  const remainingToPick = members.filter((m) => !manualPicks.some((p) => p.user_id === m.user_id));
+  const totalSlots = members.reduce((sum, m) => sum + (m.slots || 1), 0);
+  const remainingToPick = members.filter((m) => manualPicks.filter((p) => p.user_id === m.user_id).length < (m.slots || 1));
 
   return (
     <div className="space-y-5">
@@ -149,7 +156,10 @@ export default function FortuneWheelPage() {
             </Button>
           </div>
           <p className="mt-3 text-center text-xs text-slate-400">
-            Each of the {members.length} members is selected exactly once. This purely fixes the order — everyone still contributes and receives the same amount.
+            {totalSlots === members.length
+              ? `Each of the ${members.length} members is selected exactly once.`
+              : `${totalSlots} total slots across ${members.length} members — a multi-slot member gets one turn per slot they hold.`}{" "}
+            This purely fixes the order — the monthly contribution amount is unaffected.
           </p>
         </Card>
       )}
@@ -165,13 +175,13 @@ export default function FortuneWheelPage() {
           {manualPicks.length > 0 && (
             <div className="mt-4 divide-y divide-slate-100 rounded-xl border border-slate-100">
               {manualPicks.map((m, idx) => (
-                <div key={m.user_id} className="flex items-center gap-3 p-3">
+                <div key={`${m.user_id}-${idx}`} className="flex items-center gap-3 p-3">
                   <span className="w-6 text-sm font-bold text-slate-400">{idx + 1}</span>
                   <Avatar name={m.name} photoUrl={m.photo_url} size={32} />
                   <p className="flex-1 text-sm font-semibold text-slate-900">{m.name}</p>
                   <button
                     type="button"
-                    onClick={() => unpickMember(m.user_id)}
+                    onClick={() => unpickAt(idx)}
                     className="text-xs font-medium text-slate-400 hover:text-rose-600"
                   >
                     Remove
@@ -184,24 +194,28 @@ export default function FortuneWheelPage() {
           {remainingToPick.length > 0 && (
             <div className="mt-4">
               <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
-                Remaining ({remainingToPick.length})
+                Remaining ({totalSlots - manualPicks.length} slot{totalSlots - manualPicks.length !== 1 ? "s" : ""})
               </p>
               <div className="flex flex-wrap gap-2">
-                {remainingToPick.map((m) => (
-                  <button
-                    key={m.user_id}
-                    type="button"
-                    onClick={() => pickMember(m)}
-                    className="rounded-lg bg-slate-100 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-200"
-                  >
-                    {m.name}
-                  </button>
-                ))}
+                {remainingToPick.map((m) => {
+                  const usedSoFar = manualPicks.filter((p) => p.user_id === m.user_id).length;
+                  return (
+                    <button
+                      key={m.user_id}
+                      type="button"
+                      onClick={() => pickMember(m)}
+                      className="rounded-lg bg-slate-100 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-200"
+                    >
+                      {m.name}
+                      {(m.slots || 1) > 1 && ` (${usedSoFar}/${m.slots})`}
+                    </button>
+                  );
+                })}
               </div>
             </div>
           )}
 
-          {manualPicks.length === members.length && (
+          {manualPicks.length === totalSlots && (
             <Button onClick={saveManualOrder} disabled={savingOrder} className="mt-4 w-full">
               {savingOrder ? "Saving…" : "Save This Order"}
             </Button>

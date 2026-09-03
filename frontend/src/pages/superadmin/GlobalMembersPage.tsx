@@ -4,7 +4,7 @@ import { useAuth } from "../../lib/AuthContext";
 import { useUsers } from "../../lib/queries";
 import { api, ApiError } from "../../lib/api";
 import { Avatar, Button, Card, ErrorBanner, Field, LoadingScreen, SectionTitle, StatusBadge, inputClass } from "../../components/ui";
-import { PlusIcon, EditIcon, TrashIcon } from "../../components/icons";
+import { PlusIcon, EditIcon, TrashIcon, KeyIcon } from "../../components/icons";
 
 type BulkRow = { name: string; phone: string; email: string | null; lineNumber: number };
 type BulkResult = {
@@ -39,6 +39,9 @@ export default function GlobalMembersPage() {
   const [bulkResult, setBulkResult] = useState<BulkResult | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [resettingId, setResettingId] = useState<string | null>(null);
+  const [resetResult, setResetResult] = useState<{ name: string; tempPassword: string } | null>(null);
+  const [resetSaving, setResetSaving] = useState(false);
 
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -111,6 +114,22 @@ export default function GlobalMembersPage() {
     qc.invalidateQueries({ queryKey: ["users"] });
   }
 
+  async function resetPassword(userId: string, name: string) {
+    setError(null);
+    setResetSaving(true);
+    try {
+      const res = await api.post<{ tempPassword: string }>(`/users/${userId}/reset-password`, {});
+      setResetResult({ name, tempPassword: res.tempPassword });
+      setCreated(null);
+      setBulkResult(null);
+      setResettingId(null);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to reset password");
+    } finally {
+      setResetSaving(false);
+    }
+  }
+
   async function deleteMember(userId: string) {
     setError(null);
     try {
@@ -142,6 +161,13 @@ export default function GlobalMembersPage() {
             Temporary password (share securely, they should change it after first login):
           </p>
           <div className="mt-1 inline-block rounded-lg bg-slate-50 px-2 py-1 font-mono text-xs">{created.tempPassword}</div>
+        </Card>
+      )}
+      {resetResult && (
+        <Card className="border border-amber-100 p-4">
+          <p className="text-sm font-semibold text-amber-700">{resetResult.name}'s password was reset</p>
+          <p className="mt-1 text-xs text-slate-500">Default password (share securely, ask them to change it after logging in):</p>
+          <div className="mt-1 inline-block rounded-lg bg-slate-50 px-2 py-1 font-mono text-xs">{resetResult.tempPassword}</div>
         </Card>
       )}
       {bulkResult && (
@@ -237,37 +263,65 @@ export default function GlobalMembersPage() {
       <Card className="divide-y divide-slate-100">
         {users?.map((u) => (
           <div key={u.id}>
-            <div className="flex items-center gap-3 p-4">
+            <div className="flex items-start gap-3 p-4">
               <Avatar name={u.name} photoUrl={u.photoUrl} size={36} />
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-semibold text-slate-900">{u.name}</p>
-                <p className="text-xs text-slate-500">
-                  {u.memberCode} · {u.role.replace("_", " ")}
-                </p>
+              <div className="min-w-0 flex-1 space-y-1.5">
+                <div>
+                  <p className="truncate text-sm font-semibold text-slate-900">{u.name}</p>
+                  <p className="text-xs text-slate-500">
+                    {u.memberCode} · {u.role.replace("_", " ")}
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1">
+                  <StatusBadge status={u.status} />
+                  {u.role !== "SUPER_ADMIN" && (
+                    <button onClick={() => toggleStatus(u.id, u.status)} className="ml-1 text-xs font-medium text-slate-500 hover:text-slate-800 hover:underline">
+                      {u.status === "ACTIVE" ? "Suspend" : "Activate"}
+                    </button>
+                  )}
+                  <button
+                    onClick={() => setResettingId(resettingId === u.id ? null : u.id)}
+                    className="rounded-lg p-1.5 text-slate-400 hover:bg-amber-50 hover:text-amber-600"
+                    title="Reset password"
+                  >
+                    <KeyIcon width={16} height={16} />
+                  </button>
+                  <button
+                    onClick={() => setEditingId(editingId === u.id ? null : u.id)}
+                    className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-50 hover:text-slate-700"
+                    title="Edit"
+                  >
+                    <EditIcon width={16} height={16} />
+                  </button>
+                  {u.id !== me?.id && (
+                    <button
+                      onClick={() => setDeletingId(deletingId === u.id ? null : u.id)}
+                      className="rounded-lg p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600"
+                      title="Delete"
+                    >
+                      <TrashIcon width={16} height={16} />
+                    </button>
+                  )}
+                </div>
               </div>
-              <StatusBadge status={u.status} />
-              {u.role !== "SUPER_ADMIN" && (
-                <button onClick={() => toggleStatus(u.id, u.status)} className="ml-1 text-xs font-medium text-slate-500 hover:text-slate-800 hover:underline">
-                  {u.status === "ACTIVE" ? "Suspend" : "Activate"}
-                </button>
-              )}
-              <button
-                onClick={() => setEditingId(editingId === u.id ? null : u.id)}
-                className="ml-1 rounded-lg p-1.5 text-slate-400 hover:bg-slate-50 hover:text-slate-700"
-                title="Edit"
-              >
-                <EditIcon width={16} height={16} />
-              </button>
-              {u.id !== me?.id && (
-                <button
-                  onClick={() => setDeletingId(deletingId === u.id ? null : u.id)}
-                  className="rounded-lg p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600"
-                  title="Delete"
-                >
-                  <TrashIcon width={16} height={16} />
-                </button>
-              )}
             </div>
+
+            {resettingId === u.id && (
+              <div className="space-y-2 border-t border-amber-100 bg-amber-50/50 p-4">
+                <p className="text-sm text-amber-800">
+                  Reset <span className="font-semibold">{u.name}</span>'s password back to the default password? They'll
+                  need to log in with it and change it afterwards.
+                </p>
+                <div className="flex gap-2">
+                  <Button variant="secondary" onClick={() => setResettingId(null)}>
+                    Never mind
+                  </Button>
+                  <Button disabled={resetSaving} onClick={() => resetPassword(u.id, u.name)}>
+                    {resetSaving ? "Resetting…" : "Yes, reset password"}
+                  </Button>
+                </div>
+              </div>
+            )}
 
             {editingId === u.id && (
               <EditMemberForm

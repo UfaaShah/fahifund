@@ -2,8 +2,9 @@ import { useState } from "react";
 import { useParams } from "react-router-dom";
 import { useFund, useInvalidateFund, useMonth } from "../../lib/queries";
 import { api, ApiError, assetUrl } from "../../lib/api";
-import { Button, Card, ErrorBanner, LoadingScreen, ProgressBar, StatusBadge, Avatar, inputClass } from "../../components/ui";
+import { Button, Card, ErrorBanner, LoadingScreen, ProgressBar, StatusBadge, Avatar, inputClass, SlideOver } from "../../components/ui";
 import { money } from "../../lib/format";
+import { DownloadIcon } from "../../components/icons";
 
 export default function CollectionPage() {
   const { fundId } = useParams();
@@ -16,6 +17,7 @@ export default function CollectionPage() {
   const [rejectReason, setRejectReason] = useState("");
   const [reminding, setReminding] = useState(false);
   const [reminded, setReminded] = useState<number | null>(null);
+  const [viewingReceipt, setViewingReceipt] = useState<{ path: string; name: string } | null>(null);
 
   if (isLoading || !fund) return <LoadingScreen />;
 
@@ -95,9 +97,13 @@ export default function CollectionPage() {
               <StatusBadge status={p.status} />
             </div>
             {p.receipt_path && (
-              <a href={assetUrl(p.receipt_path)} target="_blank" rel="noreferrer" className="mt-2 inline-block text-xs font-medium text-brand-600 hover:underline">
+              <button
+                type="button"
+                onClick={() => setViewingReceipt({ path: p.receipt_path!, name: p.name || "Receipt" })}
+                className="mt-2 inline-block text-xs font-medium text-brand-600 hover:underline"
+              >
                 View receipt
-              </a>
+              </button>
             )}
             {p.status === "SENT" && (
               <div className="mt-3 flex gap-2">
@@ -137,6 +143,35 @@ export default function CollectionPage() {
             </div>
           ))}
       </Card>
+
+      <SlideOver open={!!viewingReceipt} onClose={() => setViewingReceipt(null)} title={viewingReceipt ? `${viewingReceipt.name}'s receipt` : "Receipt"}>
+        {viewingReceipt && <ReceiptPreview path={viewingReceipt.path} />}
+      </SlideOver>
+    </div>
+  );
+}
+
+function ReceiptPreview({ path }: { path: string }) {
+  const url = assetUrl(path);
+  const isPdf = path.toLowerCase().endsWith(".pdf");
+  return (
+    <div className="flex h-full flex-col">
+      <div className="min-h-0 flex-1 overflow-auto rounded-xl bg-slate-50">
+        {isPdf ? (
+          <iframe src={url} title="Receipt" className="h-[70vh] w-full rounded-xl" />
+        ) : (
+          <img src={url} alt="Receipt" className="w-full rounded-xl object-contain" />
+        )}
+      </div>
+      <a
+        href={url}
+        download
+        target="_blank"
+        rel="noreferrer"
+        className="mt-4 flex items-center justify-center gap-2 rounded-xl bg-slate-100 px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-200"
+      >
+        <DownloadIcon width={16} height={16} /> Open original
+      </a>
     </div>
   );
 }

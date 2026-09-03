@@ -78,3 +78,12 @@ export const EditIcon = (p: SVGProps<SVGSVGElement>) => (
 export const TrashIcon = (p: SVGProps<SVGSVGElement>) => (
   <svg {...base(p)}><path d="M3 6h18" /><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" /><path d="M10 11v6M14 11v6" /></svg>
 );
+export const CloseIcon = (p: SVGProps<SVGSVGElement>) => (
+  <svg {...base(p)}><path d="M18 6 6 18" /><path d="M6 6l12 12" /></svg>
+);
+export const KeyIcon = (p: SVGProps<SVGSVGElement>) => (
+  <svg {...base(p)}><circle cx="8" cy="15" r="4" /><path d="M10.5 12.5 20 3" /><path d="M16 7l2.5 2.5" /><path d="M13 4l2.5 2.5" /></svg>
+);
+export const DownloadIcon = (p: SVGProps<SVGSVGElement>) => (
+  <svg {...base(p)}><path d="M12 3v12" /><path d="M7 10l5 5 5-5" /><path d="M4 21h16" /></svg>
+);

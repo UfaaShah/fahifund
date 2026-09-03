@@ -107,6 +107,7 @@ export interface FundMemberRow {
   fund_id: string;
   user_id: string;
   member_number: number;
+  slots: number;
   status: string;
   joined_at: string;
   name: string;

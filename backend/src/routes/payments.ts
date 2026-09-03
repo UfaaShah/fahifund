@@ -57,15 +57,22 @@ router.post("/", authenticate, authorize("USER", "ADMIN"), upload.single("receip
   const referenceNumber = req.body?.referenceNumber || existing?.reference_number || null;
   const now = new Date().toISOString();
 
+  // A member holding multiple slots pays contribution_amount for each slot,
+  // combined into this one payment with a single receipt.
+  const membership = db
+    .prepare("SELECT slots FROM fund_members WHERE fund_id = ? AND user_id = ? AND status = 'ACTIVE'")
+    .get(fundId, req.user!.userId) as { slots: number } | undefined;
+  const amount = fund.contribution_amount * (membership?.slots || 1);
+
   if (existing) {
     db.prepare(
-      `UPDATE payments SET status = 'SENT', payment_date = ?, receipt_path = ?, reference_number = ?, note = NULL, verified_by_id = NULL, verified_at = NULL, updated_at = ? WHERE id = ?`
-    ).run(now, receiptPath, referenceNumber, now, existing.id);
+      `UPDATE payments SET amount = ?, status = 'SENT', payment_date = ?, receipt_path = ?, reference_number = ?, note = NULL, verified_by_id = NULL, verified_at = NULL, updated_at = ? WHERE id = ?`
+    ).run(amount, now, receiptPath, referenceNumber, now, existing.id);
   } else {
     db.prepare(
       `INSERT INTO payments (id, fund_id, month_number, member_id, amount, payment_date, status, receipt_path, reference_number)
        VALUES (?, ?, ?, ?, ?, ?, 'SENT', ?, ?)`
-    ).run(newId(), fundId, currentMonth, req.user!.userId, fund.contribution_amount, now, receiptPath, referenceNumber);
+    ).run(newId(), fundId, currentMonth, req.user!.userId, amount, now, receiptPath, referenceNumber);
   }
 
   logAudit({ userId: req.user!.userId, fundId, action: "SUBMIT_PAYMENT", description: `Member submitted month ${currentMonth} payment for "${fund.name}"` });
