@@ -3,7 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import { useAuth } from "../../lib/AuthContext";
 import { useFund, useInvalidateFund, useMonth } from "../../lib/queries";
 import { api, ApiError } from "../../lib/api";
-import { Button, Card, ErrorBanner, LoadingScreen, StatusBadge, SuccessBanner, Avatar, inputClass, Field } from "../../components/ui";
+import { BackButton, Button, Card, ErrorBanner, LoadingScreen, StatusBadge, SuccessBanner, Avatar, inputClass, Field } from "../../components/ui";
 import { money, monthLabel } from "../../lib/format";
 import { UploadIcon, BankIcon } from "../../components/icons";
 
@@ -27,7 +27,10 @@ export default function PayoutPage() {
   if (fund.isCompleted || !month) {
     return (
       <div className="space-y-4">
-        <h1 className="text-xl font-bold text-slate-900">Payout</h1>
+        <div className="flex items-center gap-2">
+          <BackButton />
+          <h1 className="text-xl font-bold text-slate-900">Payout</h1>
+        </div>
         <Card className="p-5"><p className="text-sm text-slate-500">No payout is currently due for this fund.</p></Card>
       </div>
     );
@@ -59,7 +62,10 @@ export default function PayoutPage() {
 
   return (
     <div className="space-y-5">
-      <h1 className="text-xl font-bold text-slate-900">Payout</h1>
+      <div className="flex items-center gap-2">
+        <BackButton />
+        <h1 className="text-xl font-bold text-slate-900">Payout</h1>
+      </div>
 
       <Card className="p-5">
         <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">{monthLabel(f.startDate, month.monthNumber)} Beneficiary</p>

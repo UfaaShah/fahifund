@@ -2,9 +2,11 @@ import { Link } from "react-router-dom";
 import { useAuth } from "../../lib/AuthContext";
 import { usePrimaryFund } from "../../lib/usePrimaryFund";
 import { useFund, useMonth } from "../../lib/queries";
-import { Card, EmptyState, LoadingScreen, ProgressBar, StatusBadge, Avatar } from "../../components/ui";
+import { Card, EmptyState, LoadingScreen, ProgressBar, StatusBadge, Avatar, SectionTitle } from "../../components/ui";
 import { money, monthLabel } from "../../lib/format";
-import { FundIcon, ChevronRightIcon } from "../../components/icons";
+import { FundIcon } from "../../components/icons";
+
+type PaymentStatus = "PENDING" | "SENT" | "CONFIRMED" | "REJECTED";
 
 export default function UserDashboard() {
   const { user } = useAuth();
@@ -57,12 +59,17 @@ export default function UserDashboard() {
         </Card>
       ) : (
         <>
-          <div className="grid grid-cols-2 gap-3">
-            <StatCard
-              label={mySlots > 1 ? `My Monthly Contribution (${mySlots} slots)` : "My Monthly Contribution"}
-              value={money(fund.contributionAmount * mySlots, fund.currency)}
-            />
-            <StatCard label="Current Month" value={primary.currentMonth ? monthLabel(fund.startDate, primary.currentMonth) : "—"} />
+          <div>
+            <SectionTitle>Fixed this month</SectionTitle>
+            <Card className="divide-y divide-slate-100">
+              <FixedThisMonthRow
+                fundId={fund.id}
+                name={mySlots > 1 ? `${fund.name} (${mySlots} slots)` : fund.name}
+                subtitle={primary.currentMonth ? monthLabel(fund.startDate, primary.currentMonth) : "—"}
+                amount={money(fund.contributionAmount * mySlots, fund.currency)}
+                status={myPayment?.status}
+              />
+            </Card>
           </div>
 
           <Card className="p-4">
@@ -76,16 +83,6 @@ export default function UserDashboard() {
               {month && <span className="ml-auto"><StatusBadge status={month.status} /></span>}
             </div>
           </Card>
-
-          {myPayment?.status !== "CONFIRMED" && (
-            <Link
-              to={`/app/funds/${fund.id}/payments`}
-              className="flex items-center justify-between rounded-2xl bg-fortune-500/10 px-4 py-3.5 text-sm font-semibold text-fortune-600 ring-1 ring-fortune-500/20"
-            >
-              {myPayment?.status === "SENT" ? "Your payment is awaiting confirmation" : "Your contribution is due — pay now"}
-              <ChevronRightIcon />
-            </Link>
-          )}
 
           <div className="grid grid-cols-2 gap-3">
             <StatCard
@@ -143,5 +140,52 @@ function StatCard({ label, value }: { label: string; value: string }) {
       <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">{label}</p>
       <p className="mt-1.5 text-lg font-bold text-slate-900">{value}</p>
     </Card>
+  );
+}
+
+const DOT_COLOR: Record<string, string> = {
+  CONFIRMED: "bg-brand-500",
+  SENT: "bg-sky-500",
+  REJECTED: "bg-rose-500",
+};
+
+/** A single "fixed this month" row — a colored status dot, the item's name
+ * and month, its amount, and a pill that either launches the pay flow or
+ * shows where the payment already stands. Mirrors the row-list layout the
+ * user asked to match (name/subtitle/amount/pill "Pay" button) instead of
+ * the previous pair of stat cards + a separate due banner. */
+function FixedThisMonthRow({
+  fundId,
+  name,
+  subtitle,
+  amount,
+  status,
+}: {
+  fundId: string;
+  name: string;
+  subtitle: string;
+  amount: string;
+  status?: PaymentStatus;
+}) {
+  const dot = DOT_COLOR[status || ""] || "bg-amber-400";
+  return (
+    <div className="flex items-center gap-3 p-4">
+      <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${dot}`} />
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-semibold text-slate-900">{name}</p>
+        <p className="text-xs text-slate-500">{subtitle}</p>
+      </div>
+      <p className="shrink-0 text-sm font-bold text-slate-900">{amount}</p>
+      {status === "CONFIRMED" ? (
+        <span className="shrink-0 rounded-full bg-brand-100 px-3.5 py-1.5 text-xs font-semibold text-brand-700">Paid</span>
+      ) : (
+        <Link
+          to={`/app/funds/${fundId}/payments`}
+          className="shrink-0 rounded-full bg-brand-600 px-4 py-1.5 text-xs font-semibold text-white hover:bg-brand-700"
+        >
+          {status === "SENT" ? "Pending" : status === "REJECTED" ? "Resubmit" : "Pay"}
+        </Link>
+      )}
+    </div>
   );
 }

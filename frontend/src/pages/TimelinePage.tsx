@@ -1,6 +1,6 @@
 import { useParams } from "react-router-dom";
 import { useFund, useFundTimeline } from "../lib/queries";
-import { Card, LoadingScreen, StatusBadge } from "../components/ui";
+import { BackButton, Card, LoadingScreen, StatusBadge } from "../components/ui";
 import { money, monthLabel } from "../lib/format";
 import { CheckCircleIcon, ClockIcon } from "../components/icons";
 
@@ -13,7 +13,10 @@ export default function TimelinePage() {
 
   return (
     <div className="space-y-4">
-      <h1 className="text-xl font-bold text-slate-900">Fund Timeline</h1>
+      <div className="flex items-center gap-2">
+        <BackButton />
+        <h1 className="text-xl font-bold text-slate-900">Fund Timeline</h1>
+      </div>
       <p className="text-sm text-slate-500">{fund.fund.name}</p>
 
       <Card className="divide-y divide-slate-100">

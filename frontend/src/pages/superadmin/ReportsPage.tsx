@@ -3,7 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { useFunds } from "../../lib/queries";
 import { api, downloadFile } from "../../lib/api";
-import { Button, Card, LoadingScreen, SectionTitle } from "../../components/ui";
+import { BackButton, Button, Card, LoadingScreen, SectionTitle } from "../../components/ui";
 
 export default function ReportsPage() {
   const [params] = useSearchParams();
@@ -30,7 +30,10 @@ export default function ReportsPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-xl font-bold text-slate-900">Reports</h1>
+      <div className="flex items-center gap-2">
+        <BackButton />
+        <h1 className="text-xl font-bold text-slate-900">Reports</h1>
+      </div>
 
       <div>
         <SectionTitle

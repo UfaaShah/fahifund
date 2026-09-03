@@ -29,11 +29,17 @@ export function useFundTimeline(fundId?: string) {
   });
 }
 
-export function useMonth(fundId?: string, monthNumber?: number | null) {
+/** `live: true` keeps this month's data fresh without a manual reload — used
+ * for the Admin's Collection page so a newly-uploaded receipt or a payment
+ * confirmed from another device shows up on its own, not just after a
+ * same-session mutation. Historical months don't need this, so it's opt-in. */
+export function useMonth(fundId?: string, monthNumber?: number | null, opts?: { live?: boolean }) {
   return useQuery({
     queryKey: ["fund-month", fundId, monthNumber],
     queryFn: () => api.get<MonthSummary>(`/funds/${fundId}/months/${monthNumber}`),
     enabled: !!fundId && !!monthNumber,
+    refetchInterval: opts?.live ? 8000 : undefined,
+    refetchOnWindowFocus: opts?.live ? true : undefined,
   });
 }
 

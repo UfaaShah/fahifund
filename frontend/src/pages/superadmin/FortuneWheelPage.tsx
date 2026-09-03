@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useFund, useInvalidateFund } from "../../lib/queries";
 import { api, ApiError } from "../../lib/api";
-import { Button, Card, EmptyState, ErrorBanner, LoadingScreen, Avatar } from "../../components/ui";
+import { BackButton, Button, Card, EmptyState, ErrorBanner, LoadingScreen, Avatar } from "../../components/ui";
 import { FortuneWheel } from "../../components/FortuneWheel";
 import { UsersIcon, WheelIcon } from "../../components/icons";
 import type { FortuneOrderRow, FundMemberRow } from "../../lib/types";
@@ -29,7 +29,10 @@ export default function FortuneWheelPage() {
   if (fund.fund.fortuneLockedAt) {
     return (
       <div className="space-y-4">
-        <h1 className="text-xl font-bold text-slate-900">Fortune Wheel</h1>
+        <div className="flex items-center gap-2">
+          <BackButton />
+          <h1 className="text-xl font-bold text-slate-900">Fortune Wheel</h1>
+        </div>
         <EmptyState icon={<WheelIcon width={36} height={36} />} title="Already locked" message="This fund's Fortune order has already been finalized." />
       </div>
     );
@@ -39,7 +42,10 @@ export default function FortuneWheelPage() {
   if (members.length === 0) {
     return (
       <div className="space-y-4">
-        <h1 className="text-xl font-bold text-slate-900">Fortune Wheel</h1>
+        <div className="flex items-center gap-2">
+          <BackButton />
+          <h1 className="text-xl font-bold text-slate-900">Fortune Wheel</h1>
+        </div>
         <EmptyState icon={<UsersIcon width={36} height={36} />} title="Add members first" message="You need at least one active member before running the Fortune Wheel." />
       </div>
     );
@@ -121,9 +127,12 @@ export default function FortuneWheelPage() {
 
   return (
     <div className="space-y-5">
-      <div>
-        <h1 className="text-xl font-bold text-slate-900">Fortune Wheel</h1>
-        <p className="text-sm text-slate-500">{fund.fund.name} — establishes the fixed receiving order, once.</p>
+      <div className="flex items-center gap-2">
+        <BackButton />
+        <div>
+          <h1 className="text-xl font-bold text-slate-900">Fortune Wheel</h1>
+          <p className="text-sm text-slate-500">{fund.fund.name} — establishes the fixed receiving order, once.</p>
+        </div>
       </div>
 
       {error && <ErrorBanner message={error} />}

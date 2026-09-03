@@ -1,7 +1,7 @@
 import { useParams } from "react-router-dom";
 import { useAuth } from "../lib/AuthContext";
 import { useFund } from "../lib/queries";
-import { Card, LoadingScreen, EmptyState, Avatar } from "../components/ui";
+import { BackButton, Card, LoadingScreen, EmptyState, Avatar } from "../components/ui";
 import { monthLabel } from "../lib/format";
 import { WheelIcon, CheckCircleIcon, ClockIcon } from "../components/icons";
 
@@ -15,7 +15,10 @@ export default function FortuneOrderPage() {
   if (!fund.fund.fortuneLockedAt) {
     return (
       <div className="space-y-4">
-        <h1 className="text-xl font-bold text-slate-900">Fortune Order</h1>
+        <div className="flex items-center gap-2">
+          <BackButton />
+          <h1 className="text-xl font-bold text-slate-900">Fortune Order</h1>
+        </div>
         <EmptyState
           icon={<WheelIcon width={36} height={36} />}
           title="The Fortune Wheel hasn't run yet"
@@ -32,9 +35,12 @@ export default function FortuneOrderPage() {
 
   return (
     <div className="space-y-5">
-      <div>
-        <h1 className="text-xl font-bold text-slate-900">Fortune Order</h1>
-        <p className="text-sm text-slate-500">{fund.fund.name} — locked and final</p>
+      <div className="flex items-center gap-2">
+        <BackButton />
+        <div>
+          <h1 className="text-xl font-bold text-slate-900">Fortune Order</h1>
+          <p className="text-sm text-slate-500">{fund.fund.name} — locked and final</p>
+        </div>
       </div>
 
       {mine.length > 0 && (
@@ -43,7 +49,7 @@ export default function FortuneOrderPage() {
           <div className={mine.length > 1 ? "mt-2 space-y-2" : ""}>
             {mine.map((m) => (
               <div key={m.id}>
-                <p className="text-3xl font-bold">#{m.position}</p>
+                <p className="text-3xl font-bold text-white">#{m.position}</p>
                 <p className="text-sm text-brand-100">
                   {fund.isCompleted ? "Already received" : `Estimated month: ${monthLabel(fund.fund.startDate, m.month_number)}`}
                 </p>

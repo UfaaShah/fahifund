@@ -1,4 +1,4 @@
-import { NavLink, Outlet, useNavigate } from "react-router-dom";
+import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { useAuth } from "../lib/AuthContext";
 import { Wordmark, Logo } from "./Logo";
@@ -22,20 +22,27 @@ interface NavItem {
   to: string;
   label: string;
   icon: (p: { className?: string }) => React.ReactElement;
+  // Payments/Fortune/Collection/Payout are "chooser" routes: with exactly one
+  // fund they immediately <Navigate replace> to /app/funds/:fundId/<suffix>,
+  // which no longer matches the nav item's own `to` — so without this, the
+  // green active highlight vanishes the instant the redirect lands, even
+  // though the user is still squarely inside that section. This pattern
+  // matches the real fund-scoped URL too so the highlight sticks.
+  match?: RegExp;
 }
 
 const NAV: Record<Role, NavItem[]> = {
   USER: [
     { to: "/app", label: "Home", icon: HomeIcon },
     { to: "/app/funds", label: "Fund", icon: FundIcon },
-    { to: "/app/payments", label: "Payments", icon: PaymentsIcon },
-    { to: "/app/fortune", label: "Fortune", icon: WheelIcon },
+    { to: "/app/payments", label: "Payments", icon: PaymentsIcon, match: /^\/app\/funds\/[^/]+\/payments$/ },
+    { to: "/app/fortune", label: "Fortune", icon: WheelIcon, match: /^\/app\/funds\/[^/]+\/fortune$/ },
     { to: "/app/profile", label: "Profile", icon: ProfileIcon },
   ],
   ADMIN: [
     { to: "/app", label: "Home", icon: HomeIcon },
-    { to: "/app/collection", label: "Collection", icon: PaymentsIcon },
-    { to: "/app/payout", label: "Payout", icon: FundIcon },
+    { to: "/app/collection", label: "Collection", icon: PaymentsIcon, match: /^\/app\/funds\/[^/]+\/collection$/ },
+    { to: "/app/payout", label: "Payout", icon: FundIcon, match: /^\/app\/funds\/[^/]+\/payout$/ },
     { to: "/app/funds", label: "Fund", icon: WheelIcon },
     { to: "/app/profile", label: "Profile", icon: ProfileIcon },
   ],
@@ -43,14 +50,21 @@ const NAV: Record<Role, NavItem[]> = {
     { to: "/app", label: "Dashboard", icon: DashboardIcon },
     { to: "/app/funds", label: "Funds", icon: FundIcon },
     { to: "/app/members", label: "Members", icon: UsersIcon },
-    { to: "/app/fortune", label: "Fortune", icon: WheelIcon },
+    { to: "/app/fortune", label: "Fortune", icon: WheelIcon, match: /^\/app\/funds\/[^/]+\/fortune(-wheel)?$/ },
     { to: "/app/settings", label: "Settings", icon: SettingsIcon },
   ],
 };
 
+function isNavItemActive(item: NavItem, pathname: string): boolean {
+  if (item.match?.test(pathname)) return true;
+  if (item.to === "/app") return pathname === "/app";
+  return pathname === item.to || pathname.startsWith(item.to + "/");
+}
+
 export function Layout() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [unread, setUnread] = useState(0);
 
   useEffect(() => {
@@ -82,21 +96,21 @@ export function Layout() {
           <Wordmark />
         </div>
         <nav className="flex flex-1 flex-col gap-1">
-          {items.map((item) => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              end={item.to === "/app"}
-              className={({ isActive }) =>
-                `flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition ${
+          {items.map((item) => {
+            const isActive = isNavItemActive(item, location.pathname);
+            return (
+              <Link
+                key={item.to}
+                to={item.to}
+                className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition ${
                   isActive ? "bg-brand-50 text-brand-700" : "text-slate-600 hover:bg-slate-50"
-                }`
-              }
-            >
-              <item.icon className="shrink-0" />
-              {item.label}
-            </NavLink>
-          ))}
+                }`}
+              >
+                <item.icon className="shrink-0" />
+                {item.label}
+              </Link>
+            );
+          })}
         </nav>
         <div className="mt-auto space-y-1 border-t border-slate-100 pt-4">
           <NavLink to="/app/notifications" className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-50">
@@ -151,21 +165,21 @@ export function Layout() {
         {/* Mobile bottom nav */}
         <nav className="gpu-fixed safe-bottom fixed inset-x-0 bottom-0 z-20 border-t border-slate-200 bg-white/95 backdrop-blur md:hidden">
           <div className="mx-auto flex max-w-lg items-stretch justify-between px-1">
-            {items.map((item) => (
-              <NavLink
-                key={item.to}
-                to={item.to}
-                end={item.to === "/app"}
-                className={({ isActive }) =>
-                  `flex flex-1 flex-col items-center gap-0.5 py-2.5 text-[11px] font-medium ${
+            {items.map((item) => {
+              const isActive = isNavItemActive(item, location.pathname);
+              return (
+                <Link
+                  key={item.to}
+                  to={item.to}
+                  className={`flex flex-1 flex-col items-center gap-0.5 py-2.5 text-[11px] font-medium ${
                     isActive ? "text-brand-600" : "text-slate-400"
-                  }`
-                }
-              >
-                <item.icon />
-                {item.label}
-              </NavLink>
-            ))}
+                  }`}
+                >
+                  <item.icon />
+                  {item.label}
+                </Link>
+              );
+            })}
           </div>
         </nav>
       </div>

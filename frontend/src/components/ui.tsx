@@ -1,12 +1,44 @@
 import type { ReactNode } from "react";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { initials } from "../lib/format";
 import { assetUrl } from "../lib/api";
 import type { MonthStatus } from "../lib/types";
-import { CloseIcon } from "./icons";
+import { BackIcon, ChevronRightIcon, CloseIcon } from "./icons";
+
+/** A round back-arrow button for pages reached by drilling in from
+ * somewhere else (a fund, a member, a specific month) — without it the only
+ * way back is the browser/OS back gesture, which isn't obvious on a page
+ * that otherwise looks like a standalone screen. Defaults to browser-style
+ * "go back one step"; pass `to` for a fixed destination instead. */
+export function BackButton({ to, className = "" }: { to?: string; className?: string }) {
+  const navigate = useNavigate();
+  return (
+    <button
+      type="button"
+      onClick={() => (to ? navigate(to) : navigate(-1))}
+      aria-label="Back"
+      className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-slate-500 hover:bg-slate-100 ${className}`}
+    >
+      <BackIcon width={20} height={20} />
+    </button>
+  );
+}
 
 export function Card({ children, className = "" }: { children: ReactNode; className?: string }) {
-  return <div className={`rounded-2xl bg-white shadow-sm ring-1 ring-slate-900/5 ${className}`}>{children}</div>;
+  // Tailwind utilities of equal specificity are resolved by which rule comes
+  // later in the compiled stylesheet, not by class-attribute order — and our
+  // custom theme colors (brand-600, etc.) happen to compile *before* the
+  // built-in `white`. So a caller passing e.g. `bg-brand-600` to give a card
+  // a colored background would silently lose to this component's own default
+  // `bg-white`, rendering an unreadable white-on-white/near-white card. Only
+  // apply the default when the caller hasn't supplied their own background.
+  const hasOwnBackground = /(?:^|\s)bg-(?!none\b)/.test(className);
+  return (
+    <div className={`rounded-2xl ${hasOwnBackground ? "" : "bg-white"} shadow-sm ring-1 ring-slate-900/5 ${className}`}>
+      {children}
+    </div>
+  );
 }
 
 export function Avatar({ name, photoUrl, size = 40 }: { name: string; photoUrl?: string | null; size?: number }) {
@@ -151,6 +183,44 @@ export function SectionTitle({ children, action }: { children: ReactNode; action
       <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">{children}</h2>
       {action}
     </div>
+  );
+}
+
+/** A Card whose body only mounts once expanded — click the header to toggle.
+ * Used for detail sections (e.g. Profile's Bank Account / Change Password)
+ * that don't need to be visible at all times and would otherwise make the
+ * page a long scroll of always-open forms. */
+export function Collapsible({
+  title,
+  subtitle,
+  defaultOpen = false,
+  children,
+}: {
+  title: string;
+  subtitle?: string;
+  defaultOpen?: boolean;
+  children: ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <Card className={open ? "p-5" : "p-0"}>
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className={`flex w-full items-center justify-between text-left ${open ? "" : "p-5"}`}
+      >
+        <div>
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">{title}</h2>
+          {subtitle && !open && <p className="mt-0.5 text-xs text-slate-400">{subtitle}</p>}
+        </div>
+        <ChevronRightIcon
+          width={18}
+          height={18}
+          className={`shrink-0 text-slate-400 transition-transform ${open ? "rotate-90" : ""}`}
+        />
+      </button>
+      {open && <div className="mt-4">{children}</div>}
+    </Card>
   );
 }
 

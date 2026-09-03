@@ -3,7 +3,7 @@ import { useParams } from "react-router-dom";
 import { useAuth } from "../lib/AuthContext";
 import { useFund, useInvalidateFund, useUsers } from "../lib/queries";
 import { api, ApiError } from "../lib/api";
-import { Button, Card, ErrorBanner, LoadingScreen, Avatar, SectionTitle } from "../components/ui";
+import { BackButton, Button, Card, ErrorBanner, LoadingScreen, Avatar, SectionTitle } from "../components/ui";
 import { money } from "../lib/format";
 
 export default function FundMembersPage() {
@@ -66,7 +66,10 @@ export default function FundMembersPage() {
 
   return (
     <div className="space-y-5">
-      <h1 className="text-xl font-bold text-slate-900">Members</h1>
+      <div className="flex items-center gap-2">
+        <BackButton />
+        <h1 className="text-xl font-bold text-slate-900">Members</h1>
+      </div>
       <p className="text-sm text-slate-500">
         {fund.fund.name} · {fund.members.length} members · {totalSlots} slots total
       </p>

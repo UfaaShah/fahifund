@@ -3,7 +3,7 @@ import { useParams } from "react-router-dom";
 import { useAuth } from "../lib/AuthContext";
 import { useFund, useInvalidateFund, useMyPayments } from "../lib/queries";
 import { api, ApiError } from "../lib/api";
-import { Button, Card, ErrorBanner, LoadingScreen, StatusBadge, SuccessBanner, SectionTitle, inputClass } from "../components/ui";
+import { BackButton, Button, Card, ErrorBanner, LoadingScreen, StatusBadge, SuccessBanner, SectionTitle, inputClass } from "../components/ui";
 import { money, monthLabel, shortDate } from "../lib/format";
 import { UploadIcon, BankIcon } from "../components/icons";
 
@@ -16,6 +16,7 @@ export default function PaymentsPage() {
 
   const [file, setFile] = useState<File | null>(null);
   const [reference, setReference] = useState("");
+  const [showReference, setShowReference] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState(false);
@@ -30,17 +31,22 @@ export default function PaymentsPage() {
 
   async function submitPayment(e: React.FormEvent) {
     e.preventDefault();
+    if (!file) {
+      setError("Please add a receipt to submit your payment.");
+      return;
+    }
     setError(null);
     setSubmitting(true);
     try {
       const form = new FormData();
-      if (file) form.append("receipt", file);
+      form.append("receipt", file);
       if (reference) form.append("referenceNumber", reference);
       await api.post(`/funds/${fundId}/payments`, form);
       invalidate(fundId!);
       setSubmitted(true);
       setFile(null);
       setReference("");
+      setShowReference(false);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to submit payment");
     } finally {
@@ -50,7 +56,10 @@ export default function PaymentsPage() {
 
   return (
     <div className="space-y-5">
-      <h1 className="text-xl font-bold text-slate-900">Monthly Contribution</h1>
+      <div className="flex items-center gap-2">
+        <BackButton />
+        <h1 className="text-xl font-bold text-slate-900">Monthly Contribution</h1>
+      </div>
 
       {fund.isCompleted ? (
         <Card className="p-5">
@@ -91,22 +100,33 @@ export default function PaymentsPage() {
             <SuccessBanner message="Payment submitted. Waiting for Admin confirmation." />
           ) : (
             <Card className="p-5">
-              <SectionTitle>{alreadySent ? "Update your submission" : "I Have Paid"}</SectionTitle>
+              <SectionTitle>{alreadySent ? "Update your submission" : "Pay"}</SectionTitle>
               {error && <div className="mb-3"><ErrorBanner message={error} /></div>}
               <form onSubmit={submitPayment} className="space-y-3">
-                <input
-                  className={inputClass}
-                  placeholder="Reference number (optional)"
-                  value={reference}
-                  onChange={(e) => setReference(e.target.value)}
-                />
                 <label className="flex cursor-pointer items-center justify-center gap-2 rounded-xl border-2 border-dashed border-slate-200 px-4 py-6 text-sm text-slate-500 hover:border-brand-300">
                   <UploadIcon width={18} height={18} />
-                  {file ? file.name : "Upload receipt (optional)"}
+                  {file ? file.name : "Add receipt"}
                   <input type="file" accept="image/*,.pdf" className="hidden" onChange={(e) => setFile(e.target.files?.[0] || null)} />
                 </label>
-                <Button type="submit" disabled={submitting} className="w-full">
-                  {submitting ? "Submitting…" : alreadySent ? "Update Submission" : "I Have Paid"}
+                {showReference ? (
+                  <input
+                    className={inputClass}
+                    placeholder="Reference number (optional)"
+                    value={reference}
+                    onChange={(e) => setReference(e.target.value)}
+                    autoFocus
+                  />
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setShowReference(true)}
+                    className="text-xs font-medium text-brand-600 hover:underline"
+                  >
+                    + Add reference number (optional)
+                  </button>
+                )}
+                <Button type="submit" disabled={submitting || !file} className="w-full">
+                  {submitting ? "Submitting…" : alreadySent ? "Update Submission" : "Pay"}
                 </Button>
               </form>
             </Card>

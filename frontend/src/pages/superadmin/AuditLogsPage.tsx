@@ -1,6 +1,6 @@
 import { useSearchParams } from "react-router-dom";
 import { useAuditLogs } from "../../lib/queries";
-import { Card, EmptyState, LoadingScreen } from "../../components/ui";
+import { BackButton, Card, EmptyState, LoadingScreen } from "../../components/ui";
 import { shortDate, timeAgo } from "../../lib/format";
 import { AuditIcon } from "../../components/icons";
 
@@ -13,7 +13,10 @@ export default function AuditLogsPage() {
 
   return (
     <div className="space-y-4">
-      <h1 className="text-xl font-bold text-slate-900">Audit Log</h1>
+      <div className="flex items-center gap-2">
+        <BackButton />
+        <h1 className="text-xl font-bold text-slate-900">Audit Log</h1>
+      </div>
       {!logs || logs.length === 0 ? (
         <EmptyState icon={<AuditIcon width={36} height={36} />} title="No activity recorded yet" />
       ) : (

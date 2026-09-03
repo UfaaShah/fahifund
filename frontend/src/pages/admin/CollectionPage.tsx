@@ -1,15 +1,26 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { useFund, useInvalidateFund, useMonth } from "../../lib/queries";
 import { api, ApiError, assetUrl } from "../../lib/api";
-import { Button, Card, ErrorBanner, LoadingScreen, ProgressBar, StatusBadge, Avatar, inputClass, SlideOver } from "../../components/ui";
-import { money } from "../../lib/format";
-import { DownloadIcon } from "../../components/icons";
+import { BackButton, Button, Card, ErrorBanner, LoadingScreen, ProgressBar, StatusBadge, Avatar, inputClass, SlideOver } from "../../components/ui";
+import { money, monthLabel } from "../../lib/format";
+import { DownloadIcon, ChevronRightIcon } from "../../components/icons";
 
 export default function CollectionPage() {
   const { fundId } = useParams();
   const { data: fund } = useFund(fundId);
-  const { data: month, isLoading } = useMonth(fundId, fund?.currentMonth);
+  // Admins need to both watch the live month update as receipts come in, and
+  // browse back to earlier months to see payments already approved there —
+  // the page used to hard-lock to `fund.currentMonth` and show "no open
+  // month" once a fund completed, hiding that whole history.
+  const lastMonth = fund ? (fund.currentMonth ?? fund.fund.durationMonths) : null;
+  const [viewedMonth, setViewedMonth] = useState<number | null>(null);
+  useEffect(() => {
+    if (viewedMonth === null && lastMonth !== null) setViewedMonth(lastMonth);
+  }, [viewedMonth, lastMonth]);
+  const effectiveMonth = viewedMonth ?? lastMonth;
+  const isLiveMonth = effectiveMonth !== null && effectiveMonth === fund?.currentMonth;
+  const { data: month, isLoading } = useMonth(fundId, effectiveMonth, { live: isLiveMonth });
   const invalidate = useInvalidateFund();
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -19,16 +30,7 @@ export default function CollectionPage() {
   const [reminded, setReminded] = useState<number | null>(null);
   const [viewingReceipt, setViewingReceipt] = useState<{ path: string; name: string } | null>(null);
 
-  if (isLoading || !fund) return <LoadingScreen />;
-
-  if (fund.isCompleted || !month) {
-    return (
-      <div className="space-y-4">
-        <h1 className="text-xl font-bold text-slate-900">Collection</h1>
-        <Card className="p-5"><p className="text-sm text-slate-500">This fund has no open month right now.</p></Card>
-      </div>
-    );
-  }
+  if (isLoading || !fund || !month || effectiveMonth === null) return <LoadingScreen />;
 
   const f = fund.fund;
 
@@ -62,13 +64,43 @@ export default function CollectionPage() {
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold text-slate-900">Collection</h1>
-        <Button variant="secondary" onClick={remind} disabled={reminding || month.pendingCount === 0}>
-          {reminding ? "Sending…" : "Send Reminder"}
-        </Button>
+        <div className="flex items-center gap-2">
+          <BackButton />
+          <h1 className="text-xl font-bold text-slate-900">Collection</h1>
+        </div>
+        {isLiveMonth && (
+          <Button variant="secondary" onClick={remind} disabled={reminding || month.pendingCount === 0}>
+            {reminding ? "Sending…" : "Send Reminder"}
+          </Button>
+        )}
       </div>
       {error && <ErrorBanner message={error} />}
       {reminded !== null && <p className="text-sm text-brand-600">Reminded {reminded} member(s).</p>}
+
+      <div className="flex items-center justify-between rounded-2xl bg-white p-2 shadow-sm ring-1 ring-slate-900/5">
+        <button
+          type="button"
+          onClick={() => setViewedMonth(effectiveMonth - 1)}
+          disabled={effectiveMonth <= 1}
+          aria-label="Previous month"
+          className="flex h-8 w-8 items-center justify-center rounded-full text-slate-500 hover:bg-slate-100 disabled:opacity-30"
+        >
+          <ChevronRightIcon width={18} height={18} className="rotate-180" />
+        </button>
+        <div className="text-center">
+          <p className="text-sm font-semibold text-slate-800">{monthLabel(f.startDate, effectiveMonth)}</p>
+          {isLiveMonth && <p className="text-xs text-brand-600">Current month · updates live</p>}
+        </div>
+        <button
+          type="button"
+          onClick={() => setViewedMonth(effectiveMonth + 1)}
+          disabled={lastMonth === null || effectiveMonth >= lastMonth}
+          aria-label="Next month"
+          className="flex h-8 w-8 items-center justify-center rounded-full text-slate-500 hover:bg-slate-100 disabled:opacity-30"
+        >
+          <ChevronRightIcon width={18} height={18} />
+        </button>
+      </div>
 
       <Card className="p-5">
         <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Month {month.monthNumber} Collection</p>

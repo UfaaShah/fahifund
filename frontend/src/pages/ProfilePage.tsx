@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "../lib/AuthContext";
 import { api, ApiError } from "../lib/api";
-import { Avatar, Button, Card, ErrorBanner, Field, SectionTitle, SuccessBanner, inputClass } from "../components/ui";
+import { Avatar, Button, Card, Collapsible, ErrorBanner, Field, SuccessBanner, inputClass } from "../components/ui";
 import { LogoutIcon } from "../components/icons";
 
 export default function ProfilePage() {
@@ -88,9 +88,7 @@ function BankAccountForm({ userId, initial, onSaved }: { userId: string; initial
   }
 
   return (
-    <Card className="p-5">
-      <SectionTitle>Bank Account</SectionTitle>
-      <p className="mb-3 -mt-2 text-xs text-slate-400">Used when you collect contributions as Admin or receive a payout.</p>
+    <Collapsible title="Bank Account" subtitle="Used when you collect contributions as Admin or receive a payout.">
       {error && <div className="mb-3"><ErrorBanner message={error} /></div>}
       {saved && <div className="mb-3"><SuccessBanner message="Bank account saved." /></div>}
       <form onSubmit={save} className="space-y-3">
@@ -110,7 +108,7 @@ function BankAccountForm({ userId, initial, onSaved }: { userId: string; initial
           {saving ? "Saving…" : "Save Bank Account"}
         </Button>
       </form>
-    </Card>
+    </Collapsible>
   );
 }
 
@@ -139,8 +137,7 @@ function ChangePasswordForm() {
   }
 
   return (
-    <Card className="p-5">
-      <SectionTitle>Change Password</SectionTitle>
+    <Collapsible title="Change Password">
       {error && <div className="mb-3"><ErrorBanner message={error} /></div>}
       {saved && <div className="mb-3"><SuccessBanner message="Password changed." /></div>}
       <form onSubmit={save} className="space-y-3">
@@ -154,6 +151,6 @@ function ChangePasswordForm() {
           {saving ? "Saving…" : "Change Password"}
         </Button>
       </form>
-    </Card>
+    </Collapsible>
   );
 }

@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { api, ApiError } from "../../lib/api";
 import { useUsers } from "../../lib/queries";
-import { Button, Card, ErrorBanner, Field, inputClass } from "../../components/ui";
+import { BackButton, Button, Card, ErrorBanner, Field, inputClass } from "../../components/ui";
 import type { FundOverview } from "../../lib/types";
 
 export default function CreateFundPage() {
@@ -47,7 +47,10 @@ export default function CreateFundPage() {
 
   return (
     <div className="mx-auto max-w-lg space-y-5">
-      <h1 className="text-xl font-bold text-slate-900">Create Fund</h1>
+      <div className="flex items-center gap-2">
+        <BackButton />
+        <h1 className="text-xl font-bold text-slate-900">Create Fund</h1>
+      </div>
       <Card className="p-5">
         <form onSubmit={onSubmit} className="space-y-4">
           {error && <ErrorBanner message={error} />}

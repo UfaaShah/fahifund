@@ -1,6 +1,6 @@
 import { useParams } from "react-router-dom";
 import { useFund, usePayoutHistory } from "../lib/queries";
-import { Card, EmptyState, LoadingScreen, StatusBadge, Avatar } from "../components/ui";
+import { BackButton, Card, EmptyState, LoadingScreen, StatusBadge, Avatar } from "../components/ui";
 import { money, monthLabel, shortDate } from "../lib/format";
 import { FundIcon } from "../components/icons";
 
@@ -13,7 +13,10 @@ export default function PayoutHistoryPage() {
 
   return (
     <div className="space-y-4">
-      <h1 className="text-xl font-bold text-slate-900">Payout History</h1>
+      <div className="flex items-center gap-2">
+        <BackButton />
+        <h1 className="text-xl font-bold text-slate-900">Payout History</h1>
+      </div>
       {!payouts || payouts.length === 0 ? (
         <EmptyState icon={<FundIcon width={36} height={36} />} title="No payouts yet" />
       ) : (

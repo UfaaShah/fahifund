@@ -1,7 +1,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useNotifications } from "../lib/queries";
 import { api } from "../lib/api";
-import { Card, EmptyState, LoadingScreen, Button } from "../components/ui";
+import { BackButton, Card, EmptyState, LoadingScreen, Button } from "../components/ui";
 import { timeAgo } from "../lib/format";
 import { BellIcon, CheckCircleIcon, ClockIcon } from "../components/icons";
 
@@ -33,7 +33,10 @@ export default function NotificationsPage() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold text-slate-900">Notifications</h1>
+        <div className="flex items-center gap-2">
+          <BackButton />
+          <h1 className="text-xl font-bold text-slate-900">Notifications</h1>
+        </div>
         {notifications && notifications.some((n) => !n.isRead) && (
           <Button variant="ghost" className="!px-2 !py-1 text-xs" onClick={markAllRead}>
             Mark all read

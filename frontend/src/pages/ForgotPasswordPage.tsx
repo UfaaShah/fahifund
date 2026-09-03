@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { api, ApiError } from "../lib/api";
-import { Button, ErrorBanner, Field, SuccessBanner, inputClass } from "../components/ui";
+import { BackButton, Button, ErrorBanner, Field, SuccessBanner, inputClass } from "../components/ui";
 import { Wordmark } from "../components/Logo";
 
 export default function ForgotPasswordPage() {
@@ -30,7 +30,10 @@ export default function ForgotPasswordPage() {
         <Wordmark size={40} />
       </div>
       <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-900/5">
-        <h1 className="mb-1 text-xl font-bold text-slate-900">Forgot your password?</h1>
+        <div className="mb-1 flex items-center gap-2">
+          <BackButton to="/login" className="-ml-2" />
+          <h1 className="text-xl font-bold text-slate-900">Forgot your password?</h1>
+        </div>
         <p className="mb-6 text-sm text-slate-500">
           No link to click — enter your mobile number and we'll let your Super Admin know so they can reset it for you.
         </p>
