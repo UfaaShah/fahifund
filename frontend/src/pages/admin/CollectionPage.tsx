@@ -1,13 +1,17 @@
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
+import { useAuth } from "../../lib/AuthContext";
 import { useFund, useInvalidateFund, useMonth } from "../../lib/queries";
 import { api, ApiError, assetUrl } from "../../lib/api";
-import { BackButton, Button, Card, ErrorBanner, LoadingScreen, ProgressBar, StatusBadge, Avatar, inputClass, SlideOver } from "../../components/ui";
+import { BackButton, Button, Card, ErrorBanner, LoadingScreen, ProgressBar, StatusBadge, Avatar, inputClass, Field, SlideOver } from "../../components/ui";
 import { money, monthLabel } from "../../lib/format";
 import { DownloadIcon, ChevronRightIcon } from "../../components/icons";
 
+const PAYMENT_STATUSES = ["PENDING", "SENT", "CONFIRMED", "REJECTED"] as const;
+
 export default function CollectionPage() {
   const { fundId } = useParams();
+  const { user } = useAuth();
   const { data: fund } = useFund(fundId);
   // Admins need to both watch the live month update as receipts come in, and
   // browse back to earlier months to see payments already approved there —
@@ -29,10 +33,71 @@ export default function CollectionPage() {
   const [reminding, setReminding] = useState(false);
   const [reminded, setReminded] = useState<number | null>(null);
   const [viewingReceipt, setViewingReceipt] = useState<{ path: string; name: string } | null>(null);
+  const [selfCollecting, setSelfCollecting] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editAmount, setEditAmount] = useState("");
+  const [editStatus, setEditStatus] = useState<string>("PENDING");
+  const [editReference, setEditReference] = useState("");
+  const [editNote, setEditNote] = useState("");
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   if (isLoading || !fund || !month || effectiveMonth === null) return <LoadingScreen />;
 
   const f = fund.fund;
+  const isSuperAdmin = user!.role === "SUPER_ADMIN";
+  const isFundAdmin = user!.role === "ADMIN" && fund.fund.adminId === user!.id;
+
+  async function selfCollect() {
+    setSelfCollecting(true);
+    setError(null);
+    try {
+      await api.post(`/funds/${fundId}/payments/self-collect`);
+      invalidate(fundId!);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to record your contribution");
+    } finally {
+      setSelfCollecting(false);
+    }
+  }
+
+  function startEdit(p: { id: string; amount: number; status: string; reference_number: string | null; note: string | null }) {
+    setEditingId(p.id);
+    setEditAmount(String(p.amount));
+    setEditStatus(p.status);
+    setEditReference(p.reference_number || "");
+    setEditNote(p.note || "");
+  }
+
+  async function saveEdit(paymentId: string) {
+    setSavingEdit(true);
+    setError(null);
+    try {
+      await api.patch(`/funds/${fundId}/payments/${paymentId}`, {
+        amount: Number(editAmount),
+        status: editStatus,
+        referenceNumber: editReference || undefined,
+        note: editNote || undefined,
+      });
+      invalidate(fundId!);
+      setEditingId(null);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to update payment");
+    } finally {
+      setSavingEdit(false);
+    }
+  }
+
+  async function deletePayment(paymentId: string) {
+    setError(null);
+    try {
+      await api.delete(`/funds/${fundId}/payments/${paymentId}`);
+      invalidate(fundId!);
+      setDeletingId(null);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to delete payment");
+    }
+  }
 
   async function verify(paymentId: string, action: "CONFIRM" | "REJECT", note?: string) {
     setBusyId(paymentId);
@@ -118,62 +183,141 @@ export default function CollectionPage() {
 
       <Card className="divide-y divide-slate-100">
         {month.payments.length === 0 && fund.members.length === 0 && <p className="p-4 text-sm text-slate-500">No members in this fund yet.</p>}
-        {month.payments.map((p) => (
-          <div key={p.id} className="p-4">
-            <div className="flex items-center gap-3">
-              <Avatar name={p.name || "?"} photoUrl={p.photo_url} size={36} />
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-semibold text-slate-900">{p.name}</p>
-                <p className="text-xs text-slate-500">{money(p.amount, f.currency)}</p>
+        {month.payments.map((p) => {
+          const isMe = isFundAdmin && p.member_id === user!.id;
+          return (
+            <div key={p.id} className="p-4">
+              <div className="flex items-center gap-3">
+                <Avatar name={p.name || "?"} photoUrl={p.photo_url} size={36} />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-semibold text-slate-900">
+                    {p.name}
+                    {isMe && <span className="ml-1 text-xs font-normal text-slate-400">(you)</span>}
+                  </p>
+                  <p className="text-xs text-slate-500">{money(p.amount, f.currency)}</p>
+                </div>
+                <StatusBadge status={p.status} />
               </div>
-              <StatusBadge status={p.status} />
-            </div>
-            {p.receipt_path && (
-              <button
-                type="button"
-                onClick={() => setViewingReceipt({ path: p.receipt_path!, name: p.name || "Receipt" })}
-                className="mt-2 inline-block text-xs font-medium text-brand-600 hover:underline"
-              >
-                View receipt
-              </button>
-            )}
-            {p.status === "SENT" && (
-              <div className="mt-3 flex gap-2">
-                <Button className="flex-1" disabled={busyId === p.id} onClick={() => verify(p.id, "CONFIRM")}>
-                  {busyId === p.id ? "…" : "Confirm"}
-                </Button>
-                <Button variant="danger" className="flex-1" disabled={busyId === p.id} onClick={() => setRejectingId(p.id)}>
-                  Reject
-                </Button>
-              </div>
-            )}
-            {rejectingId === p.id && (
-              <div className="mt-3 space-y-2">
-                <input className={inputClass} placeholder="Reason for rejection" value={rejectReason} onChange={(e) => setRejectReason(e.target.value)} />
-                <div className="flex gap-2">
-                  <Button variant="secondary" className="flex-1" onClick={() => setRejectingId(null)}>
-                    Cancel
-                  </Button>
-                  <Button variant="danger" className="flex-1" disabled={busyId === p.id} onClick={() => verify(p.id, "REJECT", rejectReason)}>
-                    Confirm Reject
+              {p.receipt_path && (
+                <button
+                  type="button"
+                  onClick={() => setViewingReceipt({ path: p.receipt_path!, name: p.name || "Receipt" })}
+                  className="mt-2 inline-block text-xs font-medium text-brand-600 hover:underline"
+                >
+                  View receipt
+                </button>
+              )}
+              {isMe && p.status !== "CONFIRMED" && isLiveMonth && (
+                <div className="mt-3">
+                  <Button className="w-full" disabled={selfCollecting} onClick={selfCollect}>
+                    {selfCollecting ? "…" : "Mark My Contribution as Received"}
                   </Button>
                 </div>
-              </div>
-            )}
-          </div>
-        ))}
+              )}
+              {!isMe && p.status === "SENT" && (
+                <div className="mt-3 flex gap-2">
+                  <Button className="flex-1" disabled={busyId === p.id} onClick={() => verify(p.id, "CONFIRM")}>
+                    {busyId === p.id ? "…" : "Confirm"}
+                  </Button>
+                  <Button variant="danger" className="flex-1" disabled={busyId === p.id} onClick={() => setRejectingId(p.id)}>
+                    Reject
+                  </Button>
+                </div>
+              )}
+              {rejectingId === p.id && (
+                <div className="mt-3 space-y-2">
+                  <input className={inputClass} placeholder="Reason for rejection" value={rejectReason} onChange={(e) => setRejectReason(e.target.value)} />
+                  <div className="flex gap-2">
+                    <Button variant="secondary" className="flex-1" onClick={() => setRejectingId(null)}>
+                      Cancel
+                    </Button>
+                    <Button variant="danger" className="flex-1" disabled={busyId === p.id} onClick={() => verify(p.id, "REJECT", rejectReason)}>
+                      Confirm Reject
+                    </Button>
+                  </div>
+                </div>
+              )}
+              {isSuperAdmin && editingId !== p.id && deletingId !== p.id && (
+                <div className="mt-2 flex gap-3">
+                  <button type="button" onClick={() => startEdit(p)} className="text-xs font-medium text-slate-500 hover:underline">
+                    Edit
+                  </button>
+                  <button type="button" onClick={() => setDeletingId(p.id)} className="text-xs font-medium text-rose-600 hover:underline">
+                    Delete
+                  </button>
+                </div>
+              )}
+              {isSuperAdmin && editingId === p.id && (
+                <div className="mt-3 space-y-2 rounded-xl bg-slate-50 p-3">
+                  <Field label="Amount">
+                    <input className={inputClass} type="number" step="0.01" value={editAmount} onChange={(e) => setEditAmount(e.target.value)} />
+                  </Field>
+                  <Field label="Status">
+                    <select className={inputClass} value={editStatus} onChange={(e) => setEditStatus(e.target.value)}>
+                      {PAYMENT_STATUSES.map((s) => (
+                        <option key={s} value={s}>
+                          {s}
+                        </option>
+                      ))}
+                    </select>
+                  </Field>
+                  <Field label="Reference number">
+                    <input className={inputClass} value={editReference} onChange={(e) => setEditReference(e.target.value)} />
+                  </Field>
+                  <Field label="Note">
+                    <input className={inputClass} value={editNote} onChange={(e) => setEditNote(e.target.value)} />
+                  </Field>
+                  <div className="flex gap-2">
+                    <Button variant="secondary" className="flex-1" onClick={() => setEditingId(null)}>
+                      Cancel
+                    </Button>
+                    <Button className="flex-1" disabled={savingEdit} onClick={() => saveEdit(p.id)}>
+                      {savingEdit ? "Saving…" : "Save"}
+                    </Button>
+                  </div>
+                </div>
+              )}
+              {isSuperAdmin && deletingId === p.id && (
+                <div className="mt-3 flex items-center gap-2 rounded-xl bg-rose-50 p-3">
+                  <p className="flex-1 text-xs text-rose-700">Permanently delete this payment record?</p>
+                  <Button variant="secondary" onClick={() => setDeletingId(null)}>
+                    Cancel
+                  </Button>
+                  <Button variant="danger" onClick={() => deletePayment(p.id)}>
+                    Delete
+                  </Button>
+                </div>
+              )}
+            </div>
+          );
+        })}
         {fund.members
           .filter((m) => !month.payments.some((p) => p.member_id === m.user_id))
-          .map((m) => (
-            <div key={m.id} className="flex items-center gap-3 p-4 opacity-70">
-              <Avatar name={m.name} photoUrl={m.photo_url} size={36} />
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-semibold text-slate-900">{m.name}</p>
-                <p className="text-xs text-slate-400">Not yet submitted</p>
+          .map((m) => {
+            const isMe = isFundAdmin && m.user_id === user!.id;
+            return (
+              <div key={m.id} className="p-4">
+                <div className="flex items-center gap-3">
+                  <Avatar name={m.name} photoUrl={m.photo_url} size={36} />
+                  <div className="min-w-0 flex-1 opacity-70">
+                    <p className="truncate text-sm font-semibold text-slate-900">
+                      {m.name}
+                      {isMe && <span className="ml-1 text-xs font-normal text-slate-400">(you)</span>}
+                    </p>
+                    <p className="text-xs text-slate-400">Not yet submitted</p>
+                  </div>
+                  <StatusBadge status="PENDING" />
+                </div>
+                {isMe && isLiveMonth && (
+                  <div className="mt-3">
+                    <Button className="w-full" disabled={selfCollecting} onClick={selfCollect}>
+                      {selfCollecting ? "…" : "Mark My Contribution as Received"}
+                    </Button>
+                  </div>
+                )}
               </div>
-              <StatusBadge status="PENDING" />
-            </div>
-          ))}
+            );
+          })}
       </Card>
 
       <SlideOver open={!!viewingReceipt} onClose={() => setViewingReceipt(null)} title={viewingReceipt ? `${viewingReceipt.name}'s receipt` : "Receipt"}>

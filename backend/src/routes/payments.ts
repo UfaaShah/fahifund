@@ -118,6 +118,63 @@ router.post("/remind", authenticate, authorize("ADMIN", "SUPER_ADMIN"), (req: Au
   res.json({ remindedCount: members.length });
 });
 
+// The Collecting Admin's own contribution has no one else to submit a
+// receipt to or verify it — they already hold the money they're collecting
+// from everyone else. This lets them record their own current-month
+// contribution as received in one action (receipt optional), instead of
+// being stuck behind the normal submit-a-receipt-then-get-verified flow,
+// which has no verifier for the Admin's own payment.
+router.post("/self-collect", authenticate, authorize("ADMIN"), upload.single("receipt"), (req: AuthedRequest, res) => {
+  const fundId = req.params.fundId;
+  const fund = getFund(fundId);
+  if (!fund) return res.status(404).json({ error: "Fund not found" });
+  if (fund.admin_id !== req.user!.userId) {
+    return res.status(403).json({ error: "Only this fund's assigned Admin can record their own collection" });
+  }
+  if (fund.status !== "ACTIVE") return res.status(400).json({ error: "This fund is not currently accepting contributions" });
+
+  const currentMonth = getCurrentMonthNumber(fundId);
+  if (currentMonth > fund.duration_months) return res.status(400).json({ error: "This fund has already completed all months" });
+
+  const existing = db
+    .prepare("SELECT * FROM payments WHERE fund_id = ? AND month_number = ? AND member_id = ?")
+    .get(fundId, currentMonth, req.user!.userId) as any;
+  if (existing?.status === "CONFIRMED") {
+    return res.status(400).json({ error: "This month's contribution has already been recorded" });
+  }
+
+  const membership = db
+    .prepare("SELECT slots FROM fund_members WHERE fund_id = ? AND user_id = ? AND status = 'ACTIVE'")
+    .get(fundId, req.user!.userId) as { slots: number } | undefined;
+  const amount = fund.contribution_amount * (membership?.slots || 1);
+  const receiptPath = req.file ? publicUploadPath(req.file.filename) : existing?.receipt_path ?? null;
+  const referenceNumber = req.body?.referenceNumber || existing?.reference_number || "Collected by Admin (self)";
+  const now = new Date().toISOString();
+
+  if (existing) {
+    db.prepare(
+      `UPDATE payments SET amount=?, status='CONFIRMED', payment_date=?, receipt_path=?, reference_number=?, note=NULL, verified_by_id=?, verified_at=?, updated_at=? WHERE id=?`
+    ).run(amount, now, receiptPath, referenceNumber, req.user!.userId, now, now, existing.id);
+  } else {
+    db.prepare(
+      `INSERT INTO payments (id, fund_id, month_number, member_id, amount, payment_date, status, receipt_path, reference_number, verified_by_id, verified_at)
+       VALUES (?, ?, ?, ?, ?, ?, 'CONFIRMED', ?, ?, ?, ?)`
+    ).run(newId(), fundId, currentMonth, req.user!.userId, amount, now, receiptPath, referenceNumber, req.user!.userId, now);
+  }
+
+  logAudit({
+    userId: req.user!.userId,
+    fundId,
+    action: "SELF_COLLECT_PAYMENT",
+    description: `Collecting Admin recorded their own month ${currentMonth} contribution as received for "${fund.name}"`,
+  });
+
+  // If this was the last outstanding contribution, mark the payout ready same as a normal verify.
+  readyPayoutIfComplete(fund, currentMonth);
+
+  res.json(getMonthSummary(fundId, currentMonth));
+});
+
 router.patch("/:paymentId/verify", authenticate, authorize("ADMIN", "SUPER_ADMIN"), (req: AuthedRequest, res) => {
   const payment = db.prepare("SELECT * FROM payments WHERE id = ?").get(req.params.paymentId) as any;
   if (!payment) return res.status(404).json({ error: "Payment not found" });
