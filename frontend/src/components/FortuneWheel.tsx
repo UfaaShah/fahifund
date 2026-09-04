@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 
 interface Segment {
   id: string;
@@ -7,27 +7,22 @@ interface Segment {
 
 const SEGMENT_COLORS = ["#0f8a58", "#1bab6e", "#3fcb8a", "#0d6d48", "#c98a2e", "#0c563b"];
 
+/** A controlled spinning wheel — the parent owns `rotation` entirely (it
+ * knows which segment the wheel must land on, since the winner is decided
+ * server-side ahead of time) and just bumps it by a few full turns plus the
+ * exact delta needed to land the pointer on that segment. `spinning` toggles
+ * the CSS transition on/off so a reset (rotation snapping back for a fresh
+ * draw sequence) doesn't animate. */
 export function FortuneWheel({
   segments,
+  rotation,
   spinning,
-  spinToken,
 }: {
   segments: Segment[];
+  rotation: number;
   spinning: boolean;
-  /** Bump this number to trigger a fresh spin animation (extra rotation each time). */
-  spinToken: number;
 }) {
   const n = segments.length;
-  const [rotation, setRotation] = useState(0);
-
-  useMemo(() => {
-    if (spinToken > 0) {
-      // Several full rotations plus a random offset so it never lands the same way twice.
-      const extra = 1440 + Math.floor(Math.random() * 360);
-      setRotation((r) => r + extra);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [spinToken]);
 
   const gradient = useMemo(() => {
     if (n === 0) return "#e2e8f0";
@@ -53,28 +48,46 @@ export function FortuneWheel({
           transition: spinning ? "transform 3.2s cubic-bezier(0.15, 0.65, 0.25, 1)" : undefined,
         }}
       >
-        {segments.map((s, i) => {
-          const slice = 360 / n;
-          const mid = i * slice + slice / 2;
-          return (
-            <div
-              key={s.id}
-              className="absolute left-1/2 top-1/2 flex h-1/2 origin-top -translate-x-1/2 items-start justify-center pt-3"
-              style={{ transform: `rotate(${mid}deg) translateX(-50%)`, width: 2 }}
-            >
-              <span
-                className="whitespace-nowrap text-[10px] font-semibold text-white drop-shadow"
-                style={{ transform: `rotate(${mid > 90 && mid < 270 ? 180 : 0}deg)`, display: "inline-block" }}
+        {n === 0 ? null : (
+          segments.map((s, i) => {
+            const slice = 360 / n;
+            const mid = i * slice + slice / 2;
+            // Anchored at the wheel's center (origin-top) and spanning out to
+            // the rim (h-1/2), with the label pinned near the *outer* edge
+            // (items-end) rather than the center — otherwise it renders
+            // right behind the hub and is invisible. A small pb keeps it
+            // just inside the rim instead of spilling past the circle.
+            return (
+              <div
+                key={s.id}
+                className="absolute left-1/2 top-1/2 flex h-1/2 origin-top -translate-x-1/2 items-end justify-center pb-3"
+                style={{ transform: `rotate(${mid}deg) translateX(-50%)`, width: 2 }}
               >
-                {s.label}
-              </span>
-            </div>
-          );
-        })}
-        <div className="absolute left-1/2 top-1/2 flex h-16 w-16 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-white shadow ring-1 ring-slate-900/5">
+                <span
+                  className="whitespace-nowrap text-[11px] font-bold text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.6)]"
+                  style={{ transform: `rotate(${mid > 90 && mid < 270 ? 180 : 0}deg)`, display: "inline-block" }}
+                >
+                  {s.label}
+                </span>
+              </div>
+            );
+          })
+        )}
+        <div
+          className="absolute left-1/2 top-1/2 flex h-16 w-16 items-center justify-center rounded-full bg-white shadow ring-1 ring-slate-900/5"
+          style={{ transform: `translate(-50%, -50%) rotate(${-rotation}deg)` }}
+        >
           <span className="text-[10px] font-bold text-brand-700">FAHI</span>
         </div>
       </div>
+
+      {/* Sits outside the rotating wheel entirely, so it's never sideways or
+       * upside-down no matter where the wheel's cumulative spin landed. */}
+      {n === 0 && (
+        <div className="pointer-events-none absolute inset-x-0 top-10 flex items-center justify-center text-sm font-medium text-slate-400">
+          All drawn
+        </div>
+      )}
     </div>
   );
 }

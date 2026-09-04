@@ -1,6 +1,7 @@
 import path from "path";
 import fs from "fs";
 import Database from "better-sqlite3";
+import { newId } from "./ids";
 
 const dbPath = path.resolve(__dirname, "../../", process.env.DATABASE_PATH || "./dev.db");
 
@@ -15,6 +16,7 @@ export function initSchema() {
   migrateEmailNullable();
   migrateFundMembersSlots();
   migrateFortuneOrdersMultiSlot();
+  reconcileFundAdmins();
 }
 
 // One-off migration for databases created before email became optional on the users table
@@ -107,6 +109,44 @@ function migrateFortuneOrdersMultiSlot() {
     db.pragma("foreign_keys = ON");
   }
   console.log("Migration complete: fortune_orders now supports multiple positions per member.");
+}
+
+// Fix-up for a real bug (not a schema change, so safe/cheap to just re-check every boot):
+// picking an "Assigned Admin" on the Create Fund form set funds.admin_id directly but never
+// made that person an active fund_member or promoted their login from USER to ADMIN — both of
+// which the later /:id/admin reassignment route always did. Without them, that fund never
+// showed up in the admin's own `GET /funds` (queried by fund_members, not admin_id) or their
+// bottom nav (still the USER set), so they had no way to reach Collection/Payout at all, even
+// though direct fund-scoped routes already recognized them correctly via admin_id. This
+// reconciles any fund created before the fix (and is a no-op for everything created after it).
+function reconcileFundAdmins() {
+  const funds = db
+    .prepare("SELECT id, name, admin_id FROM funds WHERE admin_id IS NOT NULL")
+    .all() as { id: string; name: string; admin_id: string }[];
+  for (const fund of funds) {
+    const membership = db
+      .prepare("SELECT id, status FROM fund_members WHERE fund_id = ? AND user_id = ?")
+      .get(fund.id, fund.admin_id) as { id: string; status: string } | undefined;
+    if (!membership) {
+      const maxRow = db.prepare("SELECT MAX(member_number) as m FROM fund_members WHERE fund_id = ?").get(fund.id) as
+        | { m: number | null }
+        | undefined;
+      const memberNumber = (maxRow?.m || 0) + 1;
+      db.prepare(
+        `INSERT INTO fund_members (id, fund_id, user_id, member_number, slots) VALUES (?, ?, ?, ?, 1)`
+      ).run(newId(), fund.id, fund.admin_id, memberNumber);
+      console.log(`Reconciled: added "${fund.name}"'s assigned Admin as an active fund member.`);
+    } else if (membership.status !== "ACTIVE") {
+      db.prepare("UPDATE fund_members SET status = 'ACTIVE' WHERE id = ?").run(membership.id);
+      console.log(`Reconciled: reactivated "${fund.name}"'s assigned Admin's membership.`);
+    }
+    const promoted = db
+      .prepare("UPDATE users SET role = 'ADMIN' WHERE id = ? AND role = 'USER'")
+      .run(fund.admin_id);
+    if (promoted.changes > 0) {
+      console.log(`Reconciled: promoted "${fund.name}"'s assigned Admin from USER to ADMIN.`);
+    }
+  }
 }
 
 // Run schema on import so a fresh dev.db is always usable.

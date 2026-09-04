@@ -122,6 +122,25 @@ router.post("/", authenticate, authorize("SUPER_ADMIN"), (req: AuthedRequest, re
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'DRAFT')`
   ).run(id, d.name, d.description ?? null, d.contributionAmount, d.currency, d.startDate, d.durationMonths, d.adminId ?? null, req.user!.userId);
 
+  // Picking an Admin here is a shortcut for adding them, then assigning them
+  // Admin, in one step — so it needs to do both halves of that: make them an
+  // active fund member (the /:id/admin reassignment route below requires
+  // this already be true, since a brand-new fund can't) and promote their
+  // login from USER to ADMIN. Skipping either half was the actual bug: the
+  // fund simply never showed up in that person's `GET /funds` (still
+  // querying by fund_members, not admin_id) or bottom nav (still the USER
+  // set), so they had no way to reach Collection/Payout at all.
+  if (d.adminId) {
+    const adminUser = db.prepare("SELECT * FROM users WHERE id = ?").get(d.adminId) as any;
+    if (adminUser) {
+      db.prepare(
+        `INSERT INTO fund_members (id, fund_id, user_id, member_number, slots) VALUES (?, ?, ?, 1, 1)`
+      ).run(newId(), id, d.adminId);
+      db.prepare("UPDATE users SET role = CASE WHEN role = 'USER' THEN 'ADMIN' ELSE role END WHERE id = ?").run(d.adminId);
+      notify({ userId: d.adminId, title: "You've been assigned as Admin", message: `You are now the collecting Admin for "${d.name}".`, type: "INFO" });
+    }
+  }
+
   logAudit({ userId: req.user!.userId, fundId: id, action: "CREATE_FUND", description: `Super Admin created fund "${d.name}"` });
   res.status(201).json(fundOverview(id));
 });

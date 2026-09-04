@@ -15,7 +15,7 @@ export default function FortuneWheelPage() {
 
   const [mode, setMode] = useState<"spin" | "manual">("spin");
   const [spinning, setSpinning] = useState(false);
-  const [spinToken, setSpinToken] = useState(0);
+  const [rotation, setRotation] = useState(0);
   const [order, setOrder] = useState<FortuneOrderRow[] | null>(null);
   const [revealed, setRevealed] = useState<FortuneOrderRow[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -51,31 +51,53 @@ export default function FortuneWheelPage() {
     );
   }
 
-  async function spin() {
+  // Draws exactly one name per click, like a physical spinner — pressing
+  // Spin again draws the next one, and the wheel visibly loses that slice.
+  // The full order is still decided server-side in one cryptographically
+  // random shot (on the first click) so the outcome can't be influenced by
+  // when someone happens to click; this just gates *revealing* it to one
+  // click per turn instead of animating the whole thing automatically.
+  async function spinOnce() {
+    if (spinning) return;
     setError(null);
-    setOrder(null);
-    setRevealed([]);
-    setSpinning(true);
-    setSpinToken((t) => t + 1);
-    try {
-      const res = await api.post<{ order: FortuneOrderRow[] }>(`/funds/${fundId}/fortune-wheel/generate`);
-      // Let the wheel spin visually first, then reveal the (already-decided) order one by one.
-      setTimeout(() => {
-        setOrder(res.order);
-        let i = 0;
-        const interval = setInterval(() => {
-          i++;
-          setRevealed(res.order.slice(0, i));
-          if (i >= res.order.length) {
-            clearInterval(interval);
-            setSpinning(false);
-          }
-        }, 450);
-      }, 3300);
-    } catch (err) {
-      setSpinning(false);
-      setError(err instanceof ApiError ? err.message : "Failed to run the Fortune Wheel");
+
+    let fullOrder = order;
+    if (!fullOrder) {
+      setSpinning(true);
+      try {
+        const res = await api.post<{ order: FortuneOrderRow[] }>(`/funds/${fundId}/fortune-wheel/generate`);
+        fullOrder = res.order;
+        setOrder(fullOrder);
+      } catch (err) {
+        setSpinning(false);
+        setError(err instanceof ApiError ? err.message : "Failed to run the Fortune Wheel");
+        return;
+      }
     }
+
+    const nextEntry = fullOrder[revealed.length];
+    if (!nextEntry) return; // every position already drawn
+
+    const pool = poolSegments();
+    const winIndex = pool.findIndex((s) => s.memberId === nextEntry.member_id);
+    const n = pool.length;
+    const slice = 360 / n;
+    const mid = winIndex * slice + slice / 2;
+    // The pointer sits fixed at the top (angle 0); rotating the wheel by R
+    // moves whatever was at angle `mid` to angle `mid + R`. Solve for the R
+    // (mod 360) that lands it exactly at 0, then add a few full turns on
+    // top purely for the visual spin.
+    const targetMod = (360 - mid) % 360;
+    const currentMod = ((rotation % 360) + 360) % 360;
+    const forwardDelta = ((targetMod - currentMod) % 360 + 360) % 360;
+    const extraTurns = (4 + Math.floor(Math.random() * 2)) * 360;
+
+    setSpinning(true);
+    setRotation(rotation + extraTurns + forwardDelta);
+    setTimeout(() => {
+      setRevealed((r) => [...r, nextEntry]);
+      setSpinning(false);
+    }, 3300);
   }
 
   async function lock() {
@@ -125,6 +147,28 @@ export default function FortuneWheelPage() {
   const totalSlots = members.reduce((sum, m) => sum + (m.slots || 1), 0);
   const remainingToPick = members.filter((m) => manualPicks.filter((p) => p.user_id === m.user_id).length < (m.slots || 1));
 
+  // The wheel's current pool — every not-yet-drawn slot, one segment per
+  // slot (a member with 2 slots gets two identical-looking segments, e.g.
+  // "Ali - 1" / "Ali - 2", not one). Recomputed from `revealed` each time
+  // rather than tracked separately, so there's a single source of truth for
+  // what's still "on the wheel" — as slots get drawn, the wheel visibly
+  // shrinks and each remaining multi-slot member's segments renumber.
+  function poolSegments() {
+    return members.flatMap((m) => {
+      const total = m.slots || 1;
+      const used = revealed.filter((r) => r.member_id === m.user_id).length;
+      const remaining = Math.max(0, total - used);
+      const firstName = m.name.split(" ")[0];
+      return Array.from({ length: remaining }, (_, i) => ({
+        id: `${m.user_id}-${i}`,
+        label: total > 1 ? `${firstName} - ${i + 1}` : firstName,
+        memberId: m.user_id,
+      }));
+    });
+  }
+
+  const allDrawn = !!order && revealed.length === order.length;
+
   return (
     <div className="space-y-5">
       <div className="flex items-center gap-2">
@@ -156,20 +200,29 @@ export default function FortuneWheelPage() {
         </div>
       )}
 
-      {!order && mode === "spin" && (
+      {mode === "spin" && (
         <Card className="p-6">
-          <FortuneWheel segments={members.map((m) => ({ id: m.id, label: m.name.split(" ")[0] }))} spinning={spinning} spinToken={spinToken} />
-          <div className="mt-6 flex justify-center">
-            <Button onClick={spin} disabled={spinning} className="px-8">
-              {spinning ? "Spinning…" : "Spin Now"}
-            </Button>
+          <FortuneWheel segments={poolSegments()} rotation={rotation} spinning={spinning} />
+          <div className="mt-6 flex flex-col items-center gap-2">
+            {!allDrawn && (
+              <Button onClick={spinOnce} disabled={spinning} className="px-8">
+                {spinning ? "Spinning…" : revealed.length === 0 ? "Spin Now" : "Spin for Next Position"}
+              </Button>
+            )}
+            <p className="text-xs font-medium text-slate-400">
+              {revealed.length} / {order?.length ?? totalSlots} drawn
+            </p>
           </div>
-          <p className="mt-3 text-center text-xs text-slate-400">
-            {totalSlots === members.length
-              ? `Each of the ${members.length} members is selected exactly once.`
-              : `${totalSlots} total slots across ${members.length} members — a multi-slot member gets one turn per slot they hold.`}{" "}
-            This purely fixes the order — the monthly contribution amount is unaffected.
-          </p>
+          {!order && (
+            <p className="mt-3 text-center text-xs text-slate-400">
+              {totalSlots === members.length
+                ? `Each of the ${members.length} members is selected exactly once.`
+                : `${totalSlots} total slots across ${members.length} members — a multi-slot member gets one turn per slot they hold.`}{" "}
+              Press Spin once per position — the full order is decided the moment you start, one name is
+              just revealed per spin. This purely fixes the order — the monthly contribution amount is
+              unaffected.
+            </p>
+          )}
         </Card>
       )}
 
