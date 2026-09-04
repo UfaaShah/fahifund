@@ -36,6 +36,107 @@ router.get("/", authenticate, (req: AuthedRequest, res) => {
   res.json(rows);
 });
 
+function addMonthsIso(iso: string, months: number) {
+  const d = new Date(iso);
+  d.setUTCMonth(d.getUTCMonth() + months);
+  return d.toISOString();
+}
+
+const backfillSchema = z.object({
+  throughMonth: z.number().int().positive(),
+});
+
+// Super Admin only: for setting up a round that was already running before it was
+// entered into the app (e.g. a real fund several months in). Marks every active
+// member's contribution as collected and that month's payout as completed for
+// every month from 1 up to `throughMonth`, without anyone needing to log in and
+// submit a receipt for months that already happened in real life. Idempotent and
+// safe to re-run: any month whose payout is already COMPLETED is left untouched
+// and reported back as skipped, so calling this again with a larger throughMonth
+// only fills in the newly-added months.
+router.post("/backfill", authenticate, authorize("SUPER_ADMIN"), (req: AuthedRequest, res) => {
+  const fundId = req.params.fundId;
+  const fund = getFund(fundId);
+  if (!fund) return res.status(404).json({ error: "Fund not found" });
+  if (!fund.fortune_locked_at) {
+    return res.status(400).json({ error: "Lock the Fortune order first — a beneficiary must be known for each month before it can be backfilled." });
+  }
+  const parsed = backfillSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
+  const throughMonth = Math.min(parsed.data.throughMonth, fund.duration_months);
+
+  const members = getActiveFundMembers(fundId);
+  const now = new Date().toISOString();
+  const processed: number[] = [];
+  const skipped: { month: number; reason: string }[] = [];
+
+  const tx = db.transaction(() => {
+    for (let m = 1; m <= throughMonth; m++) {
+      const existingPayout = db.prepare("SELECT * FROM payouts WHERE fund_id=? AND month_number=?").get(fundId, m) as any;
+      if (existingPayout?.status === "COMPLETED") {
+        skipped.push({ month: m, reason: "Already completed" });
+        continue;
+      }
+      const summary = getMonthSummary(fundId, m);
+      if (!summary.beneficiary) {
+        skipped.push({ month: m, reason: "No Fortune order beneficiary for this position" });
+        continue;
+      }
+      const monthDate = addMonthsIso(fund.start_date, m - 1);
+
+      for (const member of members) {
+        const amount = fund.contribution_amount * (member.slots || 1);
+        const existingPayment = db
+          .prepare("SELECT * FROM payments WHERE fund_id=? AND month_number=? AND member_id=?")
+          .get(fundId, m, member.user_id) as any;
+        if (existingPayment) {
+          if (existingPayment.status !== "CONFIRMED") {
+            db.prepare(
+              `UPDATE payments SET status='CONFIRMED', amount=?, payment_date=?, verified_by_id=?, verified_at=?, updated_at=? WHERE id=?`
+            ).run(amount, monthDate, req.user!.userId, now, now, existingPayment.id);
+          }
+        } else {
+          db.prepare(
+            `INSERT INTO payments (id, fund_id, month_number, member_id, amount, payment_date, status, reference_number, verified_by_id, verified_at)
+             VALUES (?, ?, ?, ?, ?, ?, 'CONFIRMED', 'Backfilled — recorded by Super Admin', ?, ?)`
+          ).run(newId(), fundId, m, member.user_id, amount, monthDate, req.user!.userId, now);
+        }
+      }
+
+      if (existingPayout) {
+        db.prepare(
+          `UPDATE payouts SET status='COMPLETED', amount=?, payout_date=?, completed_by_id=?, completed_at=? WHERE id=?`
+        ).run(summary.expectedTotal, monthDate, req.user!.userId, now, existingPayout.id);
+      } else {
+        db.prepare(
+          `INSERT INTO payouts (id, fund_id, month_number, beneficiary_id, amount, payout_date, reference_number, status, completed_by_id, completed_at)
+           VALUES (?, ?, ?, ?, ?, ?, 'Backfilled — recorded by Super Admin', 'COMPLETED', ?, ?)`
+        ).run(newId(), fundId, m, summary.beneficiary.id, summary.expectedTotal, monthDate, req.user!.userId, now);
+      }
+
+      if (m >= fund.duration_months) {
+        db.prepare("UPDATE funds SET status='COMPLETED' WHERE id=?").run(fundId);
+      } else if (fund.status === "FORTUNE_PENDING" || fund.status === "DRAFT") {
+        db.prepare("UPDATE funds SET status='ACTIVE' WHERE id=?").run(fundId);
+      }
+
+      processed.push(m);
+    }
+  });
+  tx();
+
+  if (processed.length > 0) {
+    logAudit({
+      userId: req.user!.userId,
+      fundId,
+      action: "BACKFILL_MONTHS",
+      description: `Super Admin backfilled months ${processed.join(", ")} of "${fund.name}" as already collected and paid out`,
+    });
+  }
+
+  res.json({ processed, skipped });
+});
+
 router.post(
   "/:monthNumber/complete",
   authenticate,

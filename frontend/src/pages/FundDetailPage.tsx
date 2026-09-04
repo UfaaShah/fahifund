@@ -61,6 +61,10 @@ export default function FundDetailPage() {
         </div>
       </Card>
 
+      {isSuperAdmin && f.fortuneLockedAt && !fund.isCompleted && (
+        <BackfillHistoricalMonths fundId={f.id} durationMonths={f.durationMonths} currency={f.currency} onError={setError} />
+      )}
+
       {fund.currentMonthSummary && !fund.isCompleted && (
         <Card className="p-4">
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">This month</p>
@@ -295,6 +299,102 @@ function AssignAdminButton({ fundId, currentAdminId }: { fundId: string; current
         </option>
       ))}
     </select>
+  );
+}
+
+// Super Admin only: for a fund that was already running in real life before it
+// was entered into this app (e.g. re-entering an in-progress round). Marks
+// months 1 through N as already collected and paid out — without every member
+// needing to log in and submit a receipt for a month that already happened —
+// so day one of using the app can start clean at the first month that's
+// actually still open. Safe to run more than once with a larger month number;
+// months already completed are left untouched.
+function BackfillHistoricalMonths({
+  fundId,
+  durationMonths,
+  currency,
+  onError,
+}: {
+  fundId: string;
+  durationMonths: number;
+  currency: string;
+  onError: (m: string) => void;
+}) {
+  const invalidate = useInvalidateFund();
+  const [open, setOpen] = useState(false);
+  const [throughMonth, setThroughMonth] = useState("1");
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState<{ processed: number[]; skipped: { month: number; reason: string }[] } | null>(null);
+
+  if (!open) {
+    return (
+      <button onClick={() => setOpen(true)} className="text-left text-sm font-medium text-brand-600 hover:underline">
+        Backfill historical months (already collected & paid out)
+      </button>
+    );
+  }
+
+  async function run() {
+    setBusy(true);
+    onError("");
+    setResult(null);
+    try {
+      const res = await api.post<{ processed: number[]; skipped: { month: number; reason: string }[] }>(
+        `/funds/${fundId}/payouts/backfill`,
+        { throughMonth: Number(throughMonth) }
+      );
+      setResult(res);
+      invalidate(fundId);
+    } catch (err) {
+      onError(err instanceof ApiError ? err.message : "Failed to backfill months");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Card className="border border-fortune-500/20 p-4">
+      <p className="text-sm font-semibold text-slate-900">Backfill historical months</p>
+      <p className="mt-1 text-xs text-slate-500">
+        For a round that was already running before you set it up here. Marks every member's contribution as
+        collected (no receipt needed) and that month's payout as completed, for every month from 1 up to the one you
+        choose — so the next open month is the first one people actually need to pay into. This can't be undone from
+        here; use the payment/payout edit tools afterward to fix a mistake.
+      </p>
+      <div className="mt-3 flex items-end gap-2">
+        <Field label="Through month #">
+          <input
+            type="number"
+            min={1}
+            max={durationMonths}
+            className={inputClass}
+            value={throughMonth}
+            onChange={(e) => setThroughMonth(e.target.value)}
+          />
+        </Field>
+        <Button disabled={busy} onClick={run}>
+          {busy ? "Backfilling…" : "Backfill"}
+        </Button>
+      </div>
+      {result && (
+        <div className="mt-3 space-y-1 text-xs">
+          {result.processed.length > 0 && (
+            <p className="text-brand-600">
+              Backfilled month{result.processed.length !== 1 ? "s" : ""} {result.processed.join(", ")} in {currency} — every
+              member marked paid, each payout marked complete, no receipts required.
+            </p>
+          )}
+          {result.skipped.length > 0 && (
+            <p className="text-slate-500">
+              Skipped: {result.skipped.map((s) => `month ${s.month} (${s.reason})`).join("; ")}
+            </p>
+          )}
+        </div>
+      )}
+      <button onClick={() => setOpen(false)} className="mt-3 text-xs font-medium text-slate-400 hover:text-slate-700">
+        Close
+      </button>
+    </Card>
   );
 }
 
